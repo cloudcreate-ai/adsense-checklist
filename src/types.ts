@@ -68,6 +68,7 @@ export interface CheckReport {
 export interface CheckOptions {
   url: string;
   maxPages?: number;
+  maxContent?: number;
   siteType?: SiteType;
   skipAi?: boolean;
   timeout?: number;

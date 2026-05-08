@@ -76,8 +76,31 @@ function discoverChildLinks(
   return childLinks.slice(0, maxPerListing);
 }
 
+// Score URL freshness: higher = fresher. Prefers URLs with date patterns.
+function freshnessScore(url: string): number {
+  try {
+    const path = new URL(url).pathname;
+    // Match /2024/, /2025/01/, /2025-01-15/ patterns in URL
+    const m = path.match(/\/(20[12]\d)(?:[\/\-](0?[1-9]|1[0-2])(?:[\/\-](0?[1-9]|[12]\d|3[01]))?)?/);
+    if (m) {
+      const year = parseInt(m[1]);
+      const month = m[2] ? parseInt(m[2]) : 6;
+      const day = m[3] ? parseInt(m[3]) : 15;
+      return new Date(year, month - 1, day).getTime();
+    }
+  } catch {}
+  return 0;
+}
+
+// Sort URLs by freshness (newest first), stable for equal scores
+function sortByFreshness(urls: string[]): string[] {
+  const scored = urls.map((u, i) => ({ url: u, score: freshnessScore(u), index: i }));
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored.map(s => s.url);
+}
+
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxPages = 10, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+  const { url, maxPages = 50, maxContent = 20, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
   const progress = onProgress ?? (() => {});
@@ -130,18 +153,32 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       await crawlPage(link);
     }
 
-    // Phase 2: Discover child content pages from listing pages
-    const CHILDREN_PER_LISTING = 8;
+    // Phase 2: Discover content pages (recursively through listing pages)
+    const CHILDREN_PER_LISTING = 10;
+    const MAX_DISCOVERY_DEPTH = 3;
     const discoveredContent = new Set<string>();
-    const discoveredListing = new Set<string>();
-    for (const page of pages) {
-      const children = discoverChildLinks(page.url, page.links, origin, CHILDREN_PER_LISTING);
+
+    // BFS discovery: follow listing pages up to MAX_DISCOVERY_DEPTH
+    const discoveryQueue: Array<{ url: string; links: string[]; depth: number }> =
+      pages.map(p => ({ url: p.url, links: p.links, depth: 0 }));
+    const seenInDiscovery = new Set<string>([...crawledUrls].map(u => u.replace(/\/+$/, '')));
+
+    while (discoveryQueue.length > 0) {
+      const current = discoveryQueue.shift()!;
+      if (current.depth > MAX_DISCOVERY_DEPTH) continue;
+      const children = discoverChildLinks(current.url, current.links, origin, CHILDREN_PER_LISTING);
       for (const child of children) {
         const norm = child.replace(/\/+$/, '');
-        if (!crawledUrls.has(norm)) {
-          const pt = classifyPage(child);
-          if (pt === 'listing' || pt === 'unknown') discoveredListing.add(child);
-          else discoveredContent.add(child);
+        if (seenInDiscovery.has(norm)) continue;
+        seenInDiscovery.add(norm);
+        const pt = classifyPage(child);
+        if (pt === 'listing' || pt === 'unknown') {
+          // Listing pages: will need to crawl to find their children, queue for deeper discovery
+          if (current.depth < MAX_DISCOVERY_DEPTH) {
+            // We'll discover their links when we crawl them in Phase 2
+          }
+        } else {
+          discoveredContent.add(child);
         }
       }
     }
@@ -149,21 +186,37 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // Also add sitemap content pages that weren't crawled yet
     for (const smUrl of sitemapInternal) {
       const norm = smUrl.replace(/\/+$/, '');
-      if (!crawledUrls.has(norm)) {
+      if (!crawledUrls.has(norm) && !discoveredContent.has(norm)) {
         const pt = classifyPage(smUrl);
-        if (pt === 'listing' || pt === 'unknown') discoveredListing.add(smUrl);
-        else discoveredContent.add(smUrl);
+        if (pt !== 'listing' && pt !== 'unknown') {
+          discoveredContent.add(smUrl);
+        }
       }
     }
 
-    // Crawl content pages first, then listing pages (up to maxPages additional)
-    const prioritized = [...discoveredContent, ...discoveredListing];
-    const toCrawl = prioritized.slice(0, maxPages);
-    if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} discovered pages...`);
+    // Sort by freshness (newest first) then take maxContent
+    const sortedContent = sortByFreshness([...discoveredContent]);
+    const toCrawl = sortedContent.slice(0, maxContent);
+    if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} content pages (from ${discoveredContent.size} discovered)...`);
     for (let i = 0; i < toCrawl.length; i++) {
       const link = toCrawl[i];
       progress(`Phase 2: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}`);
       await crawlPage(link);
+
+      // After crawling a page, check if it has deeper content links we missed
+      const crawledPage = pages[pages.length - 1];
+      if (crawledPage && crawledPage.url === link) {
+        const deeperChildren = discoverChildLinks(link, crawledPage.links, origin, CHILDREN_PER_LISTING);
+        for (const dc of deeperChildren) {
+          const dnorm = dc.replace(/\/+$/, '');
+          if (!crawledUrls.has(dnorm) && !discoveredContent.has(dnorm) && classifyPage(dc) !== 'listing' && classifyPage(dc) !== 'unknown') {
+            // Found deeper content page, add to queue if we have room
+            if (i + discoveredContent.size < maxContent * 2) {
+              discoveredContent.add(dc);
+            }
+          }
+        }
+      }
     }
 
     // Deduplicate

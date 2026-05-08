@@ -28,7 +28,8 @@ program
   .version('1.0.0')
   .argument('<url>', 'Website URL to check')
   .option('-j, --json', 'Output JSON to stdout')
-  .option('-m, --max-pages <number>', 'Max subpages to crawl', '10')
+  .option('-m, --max-pages <number>', 'Max structural pages to crawl (Phase 1)', '50')
+  .option('-c, --max-content <number>', 'Max content pages to crawl (Phase 2)', '20')
   .option('-s, --skip-ai', 'Skip AI analysis', false)
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
@@ -50,6 +51,7 @@ program
       const report = await check({
         url,
         maxPages: parseInt(opts.maxPages, 10),
+        maxContent: parseInt(opts.maxContent, 10),
         siteType,
         skipAi: opts.skipAi,
         timeout: parseInt(opts.timeout, 10),
