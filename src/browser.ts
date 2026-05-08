@@ -140,11 +140,55 @@ export async function checkSitemap(origin: string): Promise<boolean> {
   }
 }
 
-export async function fetchSitemapUrls(origin: string): Promise<string[]> {
+// Technical/non-content URL patterns to exclude from crawling
+const NON_CONTENT_EXTENSIONS = /\.(xml|txt|json|pdf|zip|tar|gz|rar|exe|dmg|apk|css|js|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot)$/i;
+const NON_CONTENT_PATHS = /^(\/(ads\.txt|robots\.txt|sitemap\.xml|favicon\.ico|manifest\.json|sw\.js|service-worker\.js|humans\.txt|security\.txt|\.well-known))/i;
+
+export function isContentUrl(url: string): boolean {
   try {
-    const resp = await fetch(`${origin}/sitemap.xml`);
+    const { pathname } = new URL(url);
+    if (NON_CONTENT_EXTENSIONS.test(pathname)) return false;
+    if (NON_CONTENT_PATHS.test(pathname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_SITEMAP_DEPTH = 3;
+
+async function fetchSitemapRecursive(
+  sitemapUrl: string,
+  seen: Set<string>,
+  depth: number
+): Promise<string[]> {
+  if (depth > MAX_SITEMAP_DEPTH) return [];
+  const norm = sitemapUrl.replace(/\/+$/, '');
+  if (seen.has(norm)) return [];
+  seen.add(norm);
+
+  try {
+    const resp = await fetch(sitemapUrl);
     if (!resp.ok) return [];
     const text = await resp.text();
+
+    // Check if this is a sitemap index (contains <sitemap> tags)
+    const sitemapRefs = text.match(/<sitemap>[\s\S]*?<\/sitemap>/g);
+    if (sitemapRefs && depth < MAX_SITEMAP_DEPTH) {
+      const childUrls: string[] = [];
+      for (const ref of sitemapRefs) {
+        const locMatch = ref.match(/<loc>(.*?)<\/loc>/);
+        if (locMatch && locMatch[1].startsWith('http')) {
+          childUrls.push(locMatch[1]);
+        }
+      }
+      const results = await Promise.all(
+        childUrls.map(u => fetchSitemapRecursive(u, seen, depth + 1))
+      );
+      return results.flat();
+    }
+
+    // Regular sitemap: extract <loc> entries
     const matches = text.match(/<loc>(.*?)<\/loc>/g);
     if (!matches) return [];
     return matches
@@ -153,4 +197,10 @@ export async function fetchSitemapUrls(origin: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+export async function fetchSitemapUrls(origin: string): Promise<string[]> {
+  const seen = new Set<string>();
+  const urls = await fetchSitemapRecursive(`${origin}/sitemap.xml`, seen, 0);
+  return [...new Set(urls)];
 }

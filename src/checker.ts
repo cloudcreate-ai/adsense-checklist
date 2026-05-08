@@ -1,5 +1,5 @@
 import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic } from './types.js';
-import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
+import { BrowserManager, fetchPage, fetchSitemapUrls, isContentUrl } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
@@ -66,6 +66,7 @@ function discoverChildLinks(
     try {
       const linkUrl = new URL(link);
       if (linkUrl.origin !== origin) return false;
+      if (!isContentUrl(link)) return false;
       const linkPath = linkUrl.pathname;
       // Child path must start with page path and be deeper
       if (!linkPath.startsWith(pagePath)) return false;
@@ -139,8 +140,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     ];
     const allSignals: PageSignals[] = [homeData.signals];
 
-    const internalLinks = homeData.links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } });
-    const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin; } catch { return false; } });
+    const internalLinks = homeData.links.filter(l => { try { return new URL(l).origin === origin && isContentUrl(l); } catch { return false; } });
+    const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin && isContentUrl(u); } catch { return false; } });
     const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
     const uniqueLinks = allInternal.slice(0, maxPages);
 
