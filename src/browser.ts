@@ -42,8 +42,19 @@ export class BrowserManager {
 export async function fetchPage(page: Page, url: string, timeout: number = 30000) {
   const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
   const status = response?.status() ?? 0;
+
+  // Detect SPA: if body has almost no content, wait for JS to render
+  let text = await page.evaluate(() => document.body?.innerText ?? '');
+  if (text.replace(/\s+/g, '').length < 100) {
+    // Likely an SPA, wait for network idle + extra time for framework rendering
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 10000 });
+    } catch {}
+    await page.waitForTimeout(2000);
+    text = await page.evaluate(() => document.body?.innerText ?? '');
+  }
+
   const content = await page.content();
-  const text = await page.evaluate(() => document.body?.innerText ?? '');
   const links = await page.evaluate(() =>
     Array.from(document.querySelectorAll('a[href]'))
       .map(a => (a as HTMLAnchorElement).href)

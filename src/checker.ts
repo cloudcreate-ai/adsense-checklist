@@ -133,11 +133,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       crawledUrls.add(norm);
       try {
         const pg = await browser.newPage();
-        const resp = await pg.goto(link, { waitUntil: 'domcontentloaded', timeout });
-        const status = resp?.status() ?? 0;
-        if (status >= 400) { deadLinks.push(`${link} (${status})`); }
+        const data = await fetchPage(pg, link, timeout);
+        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); }
         else {
-          const data = await fetchPage(pg, link, timeout);
           pages.push({ url: link, text: data.text, title: data.title, links: data.links });
           allSignals.push(data.signals);
         }
