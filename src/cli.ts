@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { check } from './checker.js';
@@ -16,7 +17,7 @@ program
   .option('-d, --depth <number>', 'Number of internal pages to crawl', '5')
   .option('-s, --skip-ai', 'Skip AI content analysis', false)
   .option('-t, --timeout <ms>', 'Page load timeout in milliseconds', '30000')
-  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .option('--api-key <key>', 'AI API key (or set AI_API_KEY in .env)')
   .action(async (url: string, opts) => {
     // Validate URL
     try {

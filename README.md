@@ -36,7 +36,7 @@ adsense-check https://example.com --timeout 60000
 | **Site Structure** | H1 tags, robots.txt, sitemap.xml, internal links, dead links |
 | **Performance** | Load time, mobile viewport, responsive layout, font size, popups |
 | **Policy Compliance** | Blacklisted keywords (porn, gambling, piracy, etc.) |
-| **AI Analysis** | Content originality, quality, compliance (requires `ANTHROPIC_API_KEY`) |
+| **AI Analysis** | Content originality, quality, compliance (requires `AI_API_KEY`) |
 
 ## Options
 
@@ -51,17 +51,19 @@ adsense-check https://example.com --timeout 60000
 
 ## AI Analysis
 
-For deeper content quality assessment, set your Anthropic API key:
+For deeper content quality assessment, configure AI API in `.env`:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-adsense-check https://example.com
+cp .env.example .env
+# Edit .env and set AI_API_KEY, AI_API_BASE, AI_MODEL
 ```
 
-Or pass it directly:
+Compatible with any OpenAI-format API: DeepSeek, OpenAI, Moonshot, local LLM, etc.
+
+Or pass the key directly:
 
 ```bash
-adsense-check https://example.com --api-key sk-ant-...
+adsense-check https://example.com --api-key sk-xxx...
 ```
 
 ## Exit codes

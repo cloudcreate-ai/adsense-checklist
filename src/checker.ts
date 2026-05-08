@@ -5,7 +5,7 @@ import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
-import { analyzeWithClaude } from './ai/analyzer.js';
+import { analyzeWithAI } from './ai/analyzer.js';
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
   const { url, depth = 5, skipAi = false, timeout = 30000, apiKey } = options;
@@ -78,7 +78,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // AI analysis
     if (!skipAi) {
       try {
-        const aiResult = await analyzeWithClaude(pages, apiKey);
+        const aiResult = await analyzeWithAI(pages, apiKey);
         const aiCategory: CheckCategory = {
           name: 'AI Content Analysis',
           items: [

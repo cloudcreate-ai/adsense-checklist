@@ -1,5 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 export interface AiAnalysis {
   contentQuality: string;
   originality: string;
@@ -7,33 +5,50 @@ export interface AiAnalysis {
   suggestions: string[];
 }
 
-export async function analyzeWithClaude(
+function getApiEndpoint(): string {
+  const base = process.env.AI_API_BASE || 'https://api.deepseek.com';
+  return `${base.replace(/\/$/, '')}/chat/completions`;
+}
+
+function getApiKey(): string | undefined {
+  return process.env.AI_API_KEY;
+}
+
+function getModel(): string {
+  return process.env.AI_MODEL || 'deepseek-chat';
+}
+
+export async function analyzeWithAI(
   pages: Array<{ url: string; text: string }>,
   apiKey?: string
 ): Promise<AiAnalysis> {
-  const key = apiKey || process.env.ANTHROPIC_API_KEY;
+  const key = apiKey || getApiKey();
   if (!key) {
     return {
-      contentQuality: '未配置 ANTHROPIC_API_KEY，跳过 AI 分析',
+      contentQuality: '未配置 AI_API_KEY，跳过 AI 分析',
       originality: 'N/A',
       compliance: 'N/A',
       suggestions: [],
     };
   }
 
-  const client = new Anthropic({ apiKey: key });
-
   const contentSummary = pages
     .map(p => `URL: ${p.url}\n${p.text.slice(0, 2000)}`)
     .join('\n\n---\n\n');
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2048,
-    messages: [
-      {
-        role: 'user',
-        content: `你是一个网站内容质量审核专家，专门评估网站是否符合 Google AdSense 审核要求。
+  const response = await fetch(getApiEndpoint(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: getModel(),
+      max_tokens: 2048,
+      messages: [
+        {
+          role: 'user',
+          content: `你是一个网站内容质量审核专家，专门评估网站是否符合 Google AdSense 审核要求。
 
 请分析以下网站页面内容，从三个维度给出评估：
 
@@ -52,11 +67,17 @@ export async function analyzeWithClaude(
 以下是网站页面内容：
 
 ${contentSummary}`,
-      },
-    ],
+        },
+      ],
+    }),
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  if (!response.ok) {
+    throw new Error(`AI API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content ?? '';
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);

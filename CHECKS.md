@@ -7,7 +7,7 @@
 | 首页内容量 | 首页文字字数 | ≥ 300 字 |
 | 内页内容量 | 抽样内页的文字量 | ≥ 300 字 |
 | 内容重复度 | 各页面内容相似度 | 重复页面 < 30% |
-| AI 内容评估 | AI 评估内容对用户的价值 | 需要 `ANTHROPIC_API_KEY` |
+| AI 内容评估 | AI 评估内容对用户的价值 | 需要 `AI_API_KEY` |
 | AI 原创性 | AI 评估内容是否原创 | 无采集/拼凑痕迹 |
 
 ## 2. Required Pages（必要页面）
@@ -61,7 +61,8 @@
 
 ## 6. AI Content Analysis（AI 内容分析）
 
-需要设置 `ANTHROPIC_API_KEY` 环境变量或使用 `--api-key` 参数。
+需要在 `.env` 文件中配置 AI 相关环境变量，或使用 `--api-key` 参数。
+支持任何兼容 OpenAI API 格式的服务（DeepSeek、OpenAI、月之暗面、本地 LLM 等）。
 
 | 检查项 | 说明 |
 |--------|------|
