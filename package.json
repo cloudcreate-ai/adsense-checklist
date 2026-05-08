@@ -1,7 +1,15 @@
 {
-  "name": "adsense-check",
+  "name": "@cloudcreate/adsense-check",
   "version": "1.0.0",
   "description": "Check if a website meets Google AdSense review requirements",
+  "homepage": "https://cloudcreate.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cloudcreate-ai/adsense-checklist.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cloudcreate-ai/adsense-checklist/issues"
+  },
   "type": "module",
   "bin": {
     "adsense-check": "./dist/cli.js"
