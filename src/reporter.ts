@@ -47,8 +47,20 @@ export function renderTerminalReport(report: CheckReport): string {
     chalk.gray(`  URL: ${report.url}`),
     chalk.gray(`  Time: ${report.timestamp}`),
     chalk.gray(`  Site type: ${typeLabel}${confidenceLabel}`),
-    '',
   ];
+
+  // Theme info
+  if (report.siteTheme) {
+    lines.push(chalk.gray(`  Theme: ${report.siteTheme.topic} — ${report.siteTheme.description}`));
+  }
+
+  // Unsupported warning
+  if (report.siteType === 'unsupported') {
+    lines.push('');
+    lines.push(chalk.red.bold(`  ${t('theme.unsupported_warning', lang, { type: report.siteTheme?.topic ?? 'unknown' })}`));
+  }
+
+  lines.push('');
 
   // Composite score
   const scoreColor = report.compositeScore >= 80 ? chalk.green.bold : report.compositeScore >= 50 ? chalk.yellow.bold : chalk.red.bold;

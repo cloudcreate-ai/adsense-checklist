@@ -1,6 +1,6 @@
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
 export type Lang = string;
-export type SiteType = 'content' | 'game';
+export type SiteType = 'content' | 'tool' | 'game' | 'unsupported';
 export type PageType = 'homepage' | 'content' | 'game_detail' | 'required' | 'listing' | 'utility' | 'unknown';
 
 export interface CheckItem {
@@ -28,11 +28,20 @@ export interface PageDetail {
   contentStatus: CheckStatus;
   issues: string[];
   score: number;    // 0-100 per-page score
+  relevance?: 'relevant' | 'tangential' | 'off-topic';
   ai?: {
     status: CheckStatus;
     assessment: string;
     suggestions: string[];
   };
+}
+
+export interface SiteTheme {
+  type: SiteType;
+  topic: string;
+  description: string;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
 }
 
 export interface CategoryScore {
@@ -47,6 +56,7 @@ export interface CheckReport {
   lang: Lang;
   siteType: SiteType;
   siteTypeConfidence: 'high' | 'medium' | 'low';
+  siteTheme?: SiteTheme;
   categories: CheckCategory[];
   hardCategories: CheckCategory[];
   softCategories: CheckCategory[];
@@ -69,6 +79,8 @@ export interface CheckOptions {
   url: string;
   maxPages?: number;
   maxContent?: number;
+  sampleMin?: number;
+  sampleRatio?: number;
   siteType?: SiteType;
   skipAi?: boolean;
   timeout?: number;

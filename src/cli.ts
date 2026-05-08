@@ -30,19 +30,22 @@ program
   .option('-j, --json', 'Output JSON to stdout')
   .option('-m, --page-limit <number>', 'Max structural pages to crawl (Phase 1)', '50')
   .option('-c, --content-limit <number>', 'Max content pages to crawl (Phase 2)', '20')
+  .option('--sample-min <number>', 'Min content pages to sample', '20')
+  .option('--sample-ratio <ratio>', 'Content page sampling ratio (0-1)', '0.2')
   .option('--ai', 'Enable AI content quality analysis', false)
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
   .option('-o, --output <dir>', 'Report output directory', 'tmp')
   .option('--no-save', 'Skip auto-saving report')
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
-  .option('--type <type>', 'Force site type (content|game), skip auto-detection')
+  .option('--type <type>', 'Force site type (content|tool|game), skip auto-detection')
   .action(async (url: string, opts) => {
     try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
     if (!url.startsWith('http')) url = 'https://' + url;
 
     const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
-    const siteType: SiteType | undefined = opts.type === 'game' || opts.type === 'content' ? opts.type : undefined;
+    const validTypes: SiteType[] = ['content', 'tool', 'game'];
+    const siteType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : undefined;
 
     process.stderr.write(chalk.cyan(`● Checking ${url}...\n`));
 
@@ -52,6 +55,8 @@ program
         url,
         maxPages: parseInt(opts.pageLimit, 10),
         maxContent: parseInt(opts.contentLimit, 10),
+        sampleMin: parseInt(opts.sampleMin, 10),
+        sampleRatio: parseFloat(opts.sampleRatio),
         siteType,
         skipAi: !opts.ai,
         timeout: parseInt(opts.timeout, 10),

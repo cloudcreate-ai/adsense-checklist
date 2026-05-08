@@ -23,6 +23,9 @@ export interface SiteTypeResult {
 const GAME_NAV_KEYWORDS = /\b(games?|play\b|arcade|puzzle|action)\b/i;
 const GAME_NAV_KEYWORDS_ZH = /游戏|玩游戏/;
 
+const TOOL_NAV_KEYWORDS = /\b(calculator|converter|generator|tool|translat|calculat|checker|analyzer|formatter|validator|encoder|decoder)\b/i;
+const TOOL_NAV_KEYWORDS_ZH = /计算器|转换器|工具|翻译/;
+
 const GAME_IFRAME_PATTERNS = [
   /game/i,
   /play/i,
@@ -116,12 +119,24 @@ export function detectSiteType(
   if (articleRatio >= 0.7 && gameScore < 3) gameScore -= 2;
 
   const isGame = gameScore >= 3;
-  const type: SiteType = isGame ? 'game' : 'content';
 
+  let type: SiteType;
   let confidence: 'high' | 'medium' | 'low';
-  if (gameScore >= 6) confidence = 'high';
-  else if (gameScore >= 3) confidence = 'medium';
-  else confidence = 'high';
+
+  if (isGame) {
+    type = 'game';
+    confidence = gameScore >= 6 ? 'high' : 'medium';
+  } else {
+    // Tool detection: nav keywords related to tools/utilities
+    const navToolKeywords = TOOL_NAV_KEYWORDS.test(navText) || TOOL_NAV_KEYWORDS_ZH.test(navText);
+    if (navToolKeywords) {
+      type = 'tool';
+      confidence = 'medium';
+    } else {
+      type = 'content';
+      confidence = 'high';
+    }
+  }
 
   return { type, confidence, signals: { iframeRatio, canvasRatio, articleRatio, navGameKeywords } };
 }

@@ -1,4 +1,4 @@
-import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType } from './types.js';
+import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTheme } from './types.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
@@ -6,6 +6,7 @@ import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
 import { analyzeWithAI, type PageAiAnalysis } from './ai/analyzer.js';
+import { analyzeSiteTheme } from './ai/theme.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
 import { scorePage, scoreCategory, computeCompositeScore } from './scorer.js';
@@ -41,8 +42,10 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
     const pageType = classifyPage(page.url);
     const ai = aiMap.get(page.url);
     const aiStatus = ai?.status;
+    const relevance = ai?.relevance;
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
+    if (relevance) detail.relevance = relevance;
     if (ai) detail.ai = { status: ai.status, assessment: ai.assessment, suggestions: ai.suggestions };
     return detail;
   });
@@ -100,7 +103,7 @@ function sortByFreshness(urls: string[]): string[] {
 }
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxPages = 50, maxContent = 20, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+  const { url, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
   const progress = onProgress ?? (() => {});
@@ -113,6 +116,23 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const h1Count = await homepage.evaluate(() => document.querySelectorAll('h1').length);
     progress('Fetching sitemap...');
     const sitemapUrls = await fetchSitemapUrls(origin);
+
+    // AI theme analysis (runs early, after homepage is fetched)
+    let siteTheme: SiteTheme | undefined;
+    if (!skipAi) {
+      try {
+        const apiKeyResolved = apiKey || process.env.AI_API_KEY;
+        if (apiKeyResolved) {
+          progress('AI: analyzing site theme...');
+          siteTheme = await analyzeSiteTheme(
+            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
+            lang,
+            apiKeyResolved
+          );
+          progress(`AI: site type = ${siteTheme.type}, topic = ${siteTheme.topic}`);
+        }
+      } catch {}
+    }
 
     const pages: Array<{ url: string; text: string; title: string; links: string[] }> = [
       { url: homeData.url, text: homeData.text, title: homeData.title, links: homeData.links },
@@ -224,10 +244,25 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       if (seen.has(norm)) return false; seen.add(norm); return true;
     });
 
-    // Detect site type
+    // Detect site type: prefer AI theme, fallback to DOM signals
     progress('Detecting site type...');
-    const typeResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
-    const siteType = typeResult.type;
+    const domResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
+    let siteType: SiteType;
+    let siteTypeConfidence: 'high' | 'medium' | 'low';
+
+    if (siteTheme && siteTheme.type !== 'unsupported') {
+      // AI detected a valid type — use it
+      siteType = siteTheme.type;
+      siteTypeConfidence = siteTheme.confidence;
+    } else if (siteTheme?.type === 'unsupported') {
+      // AI confirmed unsupported — use it
+      siteType = 'unsupported';
+      siteTypeConfidence = siteTheme.confidence;
+    } else {
+      // Fallback to DOM detection
+      siteType = domResult.type;
+      siteTypeConfidence = domResult.confidence;
+    }
 
     // Checks - build categories with group assignments
     progress('Running checks...');
@@ -271,7 +306,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     if (!skipAi) {
       try {
         progress(`AI analysis: ${uniquePages.length} pages...`);
-        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress);
+        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTheme);
         pageAnalyses = aiResult.pageAnalyses;
         const aiItems: CheckItem[] = [
           { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },
@@ -289,6 +324,25 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     const pageDetails = buildPageDetails(uniquePages, pageAnalyses, siteType);
 
+    // Content relevance check (based on AI per-page relevance)
+    if (pageAnalyses.length > 0) {
+      const withRelevance = pageAnalyses.filter(a => a.relevance);
+      if (withRelevance.length > 0) {
+        const offTopic = withRelevance.filter(a => a.relevance === 'off-topic').length;
+        const tangential = withRelevance.filter(a => a.relevance === 'tangential').length;
+        const offTopicRatio = offTopic / withRelevance.length;
+        const relevanceStatus = offTopicRatio > 0.3 ? 'fail' : offTopicRatio > 0.1 ? 'warn' : 'pass';
+        const msg = offTopic > 0 || tangential > 0
+          ? `${offTopic} off-topic, ${tangential} tangential out of ${withRelevance.length} pages`
+          : `All ${withRelevance.length} pages relevant to site theme`;
+        allCategories.push({
+          name: t('group.content_relevance', lang),
+          items: [{ name: t('item.relevance.theme', lang), status: relevanceStatus, message: msg }],
+          group: 'soft',
+        });
+      }
+    }
+
     // Separate hard/soft categories
     const hardCategories = allCategories.filter(c => c.group === 'hard');
     const softCategories = allCategories.filter(c => c.group === 'soft');
@@ -300,7 +354,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
-      siteTypeConfidence: typeResult.confidence,
+      siteTypeConfidence,
+      siteTheme,
       categories: allCategories,
       hardCategories,
       softCategories,

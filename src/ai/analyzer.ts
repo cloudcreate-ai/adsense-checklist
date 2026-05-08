@@ -1,4 +1,4 @@
-import type { Lang } from '../types.js';
+import type { Lang, SiteTheme } from '../types.js';
 import { t } from '../i18n.js';
 
 export interface AiAnalysis {
@@ -11,6 +11,7 @@ export interface AiAnalysis {
 export interface PageAiAnalysis {
   url: string;
   status: 'pass' | 'warn' | 'fail';
+  relevance?: 'relevant' | 'tangential' | 'off-topic';
   assessment: string;
   suggestions: string[];
 }
@@ -77,13 +78,19 @@ const CONCURRENCY = 3;
 async function analyzePage(
   page: { url: string; text: string },
   langName: string,
-  date: string
+  date: string,
+  theme?: SiteTheme
 ): Promise<PageAiAnalysis> {
   const content = page.text.slice(0, PAGE_CHARS);
+
+  const themeContext = theme
+    ? `\nSite theme: ${theme.topic}\nSite type: ${theme.type}\nSite description: ${theme.description}\n\nEvaluate whether this page is relevant to the site's theme and provides value to users interested in "${theme.topic}".`
+    : '';
 
   const prompt = `You are a Google AdSense review expert. Analyze this page for "low value content" issues.
 Current date: ${date}
 Reply language: ${langName}
+${themeContext}
 
 Low value content signs:
 - Thin content lacking substantial information
@@ -100,6 +107,7 @@ ${content}
 Reply in ${langName} with JSON:
 {
   "status": "pass|warn|fail",
+  "relevance": "relevant|tangential|off-topic",
   "assessment": "Detailed assessment: content depth, originality, user value, specific issues found",
   "suggestions": ["Specific actionable suggestion to improve this page"]
 }`;
@@ -110,6 +118,7 @@ Reply in ${langName} with JSON:
     return {
       url: page.url,
       status: result.status ?? 'warn',
+      relevance: result.relevance,
       assessment: result.assessment ?? '',
       suggestions: result.suggestions ?? [],
     };
@@ -170,7 +179,8 @@ export async function analyzeWithAI(
   pages: Array<{ url: string; text: string }>,
   lang: string = 'en',
   apiKey?: string,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  theme?: SiteTheme
 ): Promise<FullAiAnalysis> {
   const key = apiKey || getApiKey();
   const empty: FullAiAnalysis = {
@@ -195,7 +205,7 @@ export async function analyzeWithAI(
       const totalBatches = Math.ceil(pages.length / CONCURRENCY);
       progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
-        batch.map(p => analyzePage(p, langName, date))
+        batch.map(p => analyzePage(p, langName, date, theme))
       );
       pageAnalyses.push(...results);
     }
