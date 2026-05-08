@@ -49,6 +49,7 @@ export async function analyzeWithAI(
         {
           role: 'user',
           content: `你是一个网站内容质量审核专家，专门评估网站是否符合 Google AdSense 审核要求。
+当前日期：${new Date().toISOString().slice(0, 10)}
 
 请分析以下网站页面内容，从三个维度给出评估：
 
