@@ -5,6 +5,17 @@ export interface AiAnalysis {
   suggestions: string[];
 }
 
+export interface PageAiAnalysis {
+  url: string;
+  status: 'pass' | 'warn' | 'fail';
+  assessment: string;
+  suggestions: string[];
+}
+
+export interface FullAiAnalysis extends AiAnalysis {
+  pageAnalyses: PageAiAnalysis[];
+}
+
 function getApiEndpoint(): string {
   const base = process.env.AI_API_BASE || 'https://api.deepseek.com';
   return `${base.replace(/\/$/, '')}/chat/completions`;
@@ -18,67 +29,17 @@ function getModel(): string {
   return process.env.AI_MODEL || 'deepseek-chat';
 }
 
-export async function analyzeWithAI(
-  pages: Array<{ url: string; text: string }>,
-  apiKey?: string
-): Promise<AiAnalysis> {
-  const key = apiKey || getApiKey();
-  if (!key) {
-    return {
-      contentQuality: { status: 'skip' as any, detail: '未配置 AI_API_KEY，跳过 AI 分析' },
-      originality: { status: 'skip' as any, detail: 'N/A' },
-      compliance: { status: 'skip' as any, detail: 'N/A' },
-      suggestions: [],
-    };
-  }
-
-  const contentSummary = pages
-    .map(p => `URL: ${p.url}\n${p.text.slice(0, 2000)}`)
-    .join('\n\n---\n\n');
-
+async function callAI(prompt: string, maxTokens: number = 4096): Promise<string> {
   const response = await fetch(getApiEndpoint(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${getApiKey()}`,
     },
     body: JSON.stringify({
       model: getModel(),
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'user',
-          content: `你是一个 Google AdSense 审核专家，专门判断网站是否存在 "low value content" 问题。
-当前日期：${new Date().toISOString().slice(0, 10)}
-
-AdSense 最常见的拒绝理由是 "low value content"（低价值内容），具体表现包括：
-- 页面内容太薄，缺乏实质性信息
-- 内容像是机器批量生成或从其他网站采集的
-- 网站没有为用户提供独特的价值（只是搬运/改写别人的内容）
-- 内容空洞，大量凑字数、重复表述、无意义的填充文字
-- 多个页面内容高度雷同，只是换了关键词
-
-请从三个维度评估：
-
-1. 内容价值：用户访问这些页面能获得什么？内容是否有深度、有见解、有帮助？还是只是泛泛而谈？
-2. 原创性：内容是否像人工撰写的原创内容？是否有 AI 生成痕迹（过于工整、缺乏个人观点）？是否有采集痕迹？
-3. 政策合规：是否含有违反 AdSense 政策的内容？
-
-请用 JSON 格式回复，每个维度包含 status 和 detail 字段。
-status 取值: "pass"（通过）、"warn"（有问题但可改进）、"fail"（不符合要求）。
-结构如下：
-{
-  "contentQuality": { "status": "pass|warn|fail", "detail": "详细评估..." },
-  "originality": { "status": "pass|warn|fail", "detail": "原创性评估..." },
-  "compliance": { "status": "pass|warn|fail", "detail": "合规性评估..." },
-  "suggestions": ["建议1", "建议2"]
-}
-
-以下是网站页面内容：
-
-${contentSummary}`,
-        },
-      ],
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
     }),
   });
 
@@ -87,21 +48,90 @@ ${contentSummary}`,
   }
 
   const data = await response.json();
-  const text = data.choices?.[0]?.message?.content ?? '';
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
+function extractJson(text: string): any {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[0]);
+  }
+  throw new Error('No JSON found in response');
+}
+
+export async function analyzeWithAI(
+  pages: Array<{ url: string; text: string }>,
+  apiKey?: string
+): Promise<FullAiAnalysis> {
+  const key = apiKey || getApiKey();
+  const empty: FullAiAnalysis = {
+    contentQuality: { status: 'skip' as any, detail: '未配置 AI_API_KEY，跳过 AI 分析' },
+    originality: { status: 'skip' as any, detail: 'N/A' },
+    compliance: { status: 'skip' as any, detail: 'N/A' },
+    suggestions: [],
+    pageAnalyses: [],
+  };
+  if (!key) return empty;
+
+  // Limit pages to avoid token overflow (max 8 pages, 1500 chars each)
+  const sampled = pages.slice(0, 8);
+  const pageContents = sampled
+    .map((p, i) => `=== 页面 ${i + 1}: ${p.url} ===\n${p.text.slice(0, 1500)}`)
+    .join('\n\n');
+
+  const prompt = `你是一个 Google AdSense 审核专家，专门判断网站是否存在 "low value content" 问题。
+当前日期：${new Date().toISOString().slice(0, 10)}
+
+AdSense 最常见的拒绝理由是 "low value content"（低价值内容），表现包括：
+- 页面内容太薄，缺乏实质性信息
+- 内容像是机器批量生成或从其他网站采集的
+- 网站没有为用户提供独特的价值
+- 内容空洞，大量凑字数、重复表述
+- 多个页面内容高度雷同，只是换了关键词
+
+请分析以下 ${sampled.length} 个页面，返回 JSON：
+
+{
+  "overall": {
+    "contentQuality": { "status": "pass|warn|fail", "detail": "整体内容价值评估..." },
+    "originality": { "status": "pass|warn|fail", "detail": "整体原创性评估..." },
+    "compliance": { "status": "pass|warn|fail", "detail": "整体合规性评估..." },
+    "suggestions": ["改进建议1", "改进建议2"]
+  },
+  "pages": [
+    {
+      "url": "页面URL",
+      "status": "pass|warn|fail",
+      "assessment": "该页面的具体评估，说明内容价值、问题所在",
+      "suggestions": ["针对该页面的具体改进建议"]
+    }
+  ]
+}
+
+页面内容：
+
+${pageContents}`;
 
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // fall through
-  }
+    const text = await callAI(prompt, 4096);
+    const result = extractJson(text);
 
-  return {
-    contentQuality: { status: 'warn', detail: text.slice(0, 500) },
-    originality: { status: 'warn', detail: '解析失败' },
-    compliance: { status: 'warn', detail: '解析失败' },
-    suggestions: [],
-  };
+    return {
+      contentQuality: result.overall?.contentQuality ?? { status: 'warn', detail: '解析异常' },
+      originality: result.overall?.originality ?? { status: 'warn', detail: '解析异常' },
+      compliance: result.overall?.compliance ?? { status: 'warn', detail: '解析异常' },
+      suggestions: result.overall?.suggestions ?? [],
+      pageAnalyses: (result.pages ?? []).map((p: any) => ({
+        url: p.url,
+        status: p.status ?? 'warn',
+        assessment: p.assessment ?? '',
+        suggestions: p.suggestions ?? [],
+      })),
+    };
+  } catch (err) {
+    return {
+      ...empty,
+      contentQuality: { status: 'warn', detail: `AI 分析失败: ${err instanceof Error ? err.message : String(err)}` },
+    };
+  }
 }

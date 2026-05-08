@@ -12,6 +12,21 @@ export interface CheckCategory {
   items: CheckItem[];
 }
 
+export interface PageDetail {
+  url: string;
+  title: string;
+  totalChars: number;
+  contentChars: number;
+  contentRatio: number;
+  contentStatus: CheckStatus;
+  issues: string[];
+  ai?: {
+    status: CheckStatus;
+    assessment: string;
+    suggestions: string[];
+  };
+}
+
 export interface CheckReport {
   url: string;
   timestamp: string;
@@ -22,6 +37,7 @@ export interface CheckReport {
   warned: number;
   failed: number;
   skipped: number;
+  pages: PageDetail[];
 }
 
 export interface CheckOptions {

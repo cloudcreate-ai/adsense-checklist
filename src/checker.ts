@@ -1,11 +1,72 @@
-import type { CheckReport, CheckOptions, CheckCategory, CheckItem } from './types.js';
+import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail } from './types.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
-import { analyzeWithAI } from './ai/analyzer.js';
+import { analyzeWithAI, type PageAiAnalysis } from './ai/analyzer.js';
+
+function extractMainContent(text: string, allPageTexts: string[]): string {
+  const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (allPageTexts.length <= 1) return paragraphs.join('\n\n');
+  const otherTexts = allPageTexts.filter(t => t !== text);
+  const threshold = Math.ceil(otherTexts.length * 0.6);
+  return paragraphs.filter(para => {
+    if (para.length < 20) return true;
+    const normalized = para.replace(/\s+/g, ' ').slice(0, 100);
+    const count = otherTexts.filter(o => o.replace(/\s+/g, ' ').includes(normalized)).length;
+    return count < threshold;
+  }).join('\n\n');
+}
+
+function buildPageDetails(
+  pages: Array<{ url: string; text: string; title: string }>,
+  aiAnalyses: PageAiAnalysis[]
+): PageDetail[] {
+  const allTexts = pages.map(p => p.text);
+  const aiMap = new Map(aiAnalyses.map(a => [a.url, a]));
+
+  return pages.map(page => {
+    const totalChars = page.text.replace(/\s+/g, '').length;
+    const mainContent = extractMainContent(page.text, allTexts);
+    const contentChars = mainContent.replace(/\s+/g, '').length;
+    const contentRatio = totalChars > 0 ? Math.round((contentChars / totalChars) * 100) : 0;
+
+    const issues: string[] = [];
+    let contentStatus: 'pass' | 'warn' | 'fail' = 'pass';
+
+    if (contentRatio < 30 && totalChars > 200) {
+      issues.push(`正文占比仅 ${contentRatio}%，大量模板元素`);
+      contentStatus = 'fail';
+    }
+    if (contentChars < 300) {
+      issues.push(`正文内容不足 (${contentChars} 字)`);
+      contentStatus = contentStatus === 'fail' ? 'fail' : 'warn';
+    }
+
+    const ai = aiMap.get(page.url);
+    const detail: PageDetail = {
+      url: page.url,
+      title: page.title,
+      totalChars,
+      contentChars,
+      contentRatio,
+      contentStatus,
+      issues,
+    };
+
+    if (ai) {
+      detail.ai = {
+        status: ai.status,
+        assessment: ai.assessment,
+        suggestions: ai.suggestions,
+      };
+    }
+
+    return detail;
+  });
+}
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
   const { url, depth = 10, skipAi = false, timeout = 30000, apiKey } = options;
@@ -64,10 +125,19 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       }
     }
 
+    // Deduplicate pages by normalized URL (strip trailing slash and hash)
+    const seen = new Set<string>();
+    const uniquePages = pages.filter(p => {
+      const normalized = p.url.replace(/\/+$/, '').split('#')[0];
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+
     // Run all checks
     const categories: CheckCategory[] = [];
 
-    categories.push(checkContentQuality(pages, allInternal.length));
+    categories.push(checkContentQuality(uniquePages, allInternal.length));
     categories.push(await checkRequiredPages({
       allLinks: homeData.linkDetails,
       navText: homeData.navText,
@@ -82,12 +152,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     categories.push(await checkPerformance(perfPage, url, playBrowser));
     await perfPage.close();
 
-    categories.push(checkPolicyCompliance(pages));
+    categories.push(checkPolicyCompliance(uniquePages));
 
-    // AI analysis
+    // AI analysis (overall + per-page)
+    let pageAnalyses: PageAiAnalysis[] = [];
     if (!skipAi) {
       try {
-        const aiResult = await analyzeWithAI(pages, apiKey);
+        const aiResult = await analyzeWithAI(uniquePages, apiKey);
+        pageAnalyses = aiResult.pageAnalyses;
+
         const aiCategory: CheckCategory = {
           name: 'AI Content Analysis',
           items: [
@@ -131,6 +204,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       }
     }
 
+    // Build per-page details
+    const pageDetails = buildPageDetails(uniquePages, pageAnalyses);
+
     // Calculate score
     const allItems = categories.flatMap(c => c.items);
     const passed = allItems.filter(i => i.status === 'pass').length;
@@ -148,6 +224,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       warned,
       failed,
       skipped,
+      pages: pageDetails,
     };
   } finally {
     await browser.close();
