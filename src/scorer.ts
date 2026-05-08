@@ -6,7 +6,7 @@ import { PAGE_TYPE_WEIGHTS } from './classifier.js';
 export interface PageCheckResult {
   label: string;
   status: CheckStatus;
-  weight: number;  // relative weight within this page type
+  weight: number;
 }
 
 function scoreFromChecks(checks: PageCheckResult[]): number {
@@ -17,7 +17,6 @@ function scoreFromChecks(checks: PageCheckResult[]): number {
     totalWeight += c.weight;
     if (c.status === 'pass') earnedWeight += c.weight;
     else if (c.status === 'warn') earnedWeight += c.weight * 0.4;
-    // fail/skip = 0
   }
   return totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 100;
 }
@@ -27,7 +26,8 @@ export function scorePage(
   contentChars: number,
   contentRatio: number,
   issues: string[],
-  siteType: SiteType
+  siteType: SiteType,
+  aiStatus?: CheckStatus
 ): { score: number; checks: PageCheckResult[] } {
   const checks: PageCheckResult[] = [];
 
@@ -53,11 +53,16 @@ export function scorePage(
   } else if (pageType === 'utility') {
     checks.push({ label: 'Functional', status: contentChars > 0 ? 'pass' : 'warn', weight: 1 });
   } else {
-    // unknown
     checks.push({ label: 'Content', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 2 });
   }
 
-  return { score: scoreFromChecks(checks), checks };
+  let score = scoreFromChecks(checks);
+
+  // AI status directly affects page score
+  if (aiStatus === 'fail') score = 0;
+  else if (aiStatus === 'warn') score = Math.min(score, 70);
+
+  return { score, checks };
 }
 
 // ─── Site-level category scoring ───────────────────────────────────
@@ -76,68 +81,109 @@ export function scoreCategory(category: CheckCategory): CategoryScore {
   return { name: category.name, score: earned, maxScore: total };
 }
 
-// ─── Composite score aggregation ───────────────────────────────────
+// ─── Composite score: hard/soft two-group system ───────────────────
 
-// Weights for different scoring components
-const SITE_CATEGORY_WEIGHT: Record<string, number> = {
-  // Matched by category name substring
-  '结构': 15, 'Structure': 15,
-  '必要页面': 15, 'Required': 15,
-  '性能': 10, 'Performance': 10,
-  '合规': 10, 'Policy': 10,
+// Soft scoring weights (must sum to 1.0)
+const SOFT_WEIGHTS = {
+  pageQuality: 0.25,    // per-page scores (AI-adjusted)
+  aiAnalysis: 0.45,     // AI content analysis
+  contentQuality: 0.20, // mechanical content checks
+  userExperience: 0.10, // font, popup checks
 };
+
+// Composite: hard * 0.4 + soft * 0.6
+const HARD_COMPOSITE_WEIGHT = 0.4;
+const SOFT_COMPOSITE_WEIGHT = 0.6;
+
+export interface CompositeResult {
+  compositeScore: number;
+  categoryScores: CategoryScore[];
+  hardStatus: 'ready' | 'warn' | 'fail';
+  softScore: number;
+  warningRatio: number;
+  warningPenalty: number;
+}
 
 export function computeCompositeScore(
   pageScores: Array<{ pageType: PageType; score: number }>,
-  siteCategoryScores: CategoryScore[]
-): { compositeScore: number; categoryScores: CategoryScore[] } {
-  // 1. Aggregate page scores by type
-  const pageTypeScores: Record<string, { total: number; count: number; weight: number }> = {};
-  for (const ps of pageScores) {
-    const key = ps.pageType;
-    if (!pageTypeScores[key]) pageTypeScores[key] = { total: 0, count: 0, weight: PAGE_TYPE_WEIGHTS[ps.pageType] || 3 };
-    pageTypeScores[key].total += ps.score;
-    pageTypeScores[key].count++;
+  hardCategories: CheckCategory[],
+  softCategories: CheckCategory[]
+): CompositeResult {
+  // 1. Hard pass rate
+  const hardItems = hardCategories.flatMap(c => c.items);
+  const hardPass = hardItems.filter(i => i.status === 'pass').length;
+  const hardFail = hardItems.filter(i => i.status === 'fail').length;
+  const hardWarn = hardItems.filter(i => i.status === 'warn').length;
+  const hardTotal = hardItems.length;
+  const hardPassRate = hardTotal > 0 ? (hardPass / hardTotal) * 100 : 100;
+
+  // Hard status
+  let hardStatus: 'ready' | 'warn' | 'fail' = 'ready';
+  if (hardFail > 0) hardStatus = 'fail';
+  else if (hardWarn > 0) hardStatus = 'warn';
+
+  // 2. Soft scoring components
+  // 2a. Page quality: score pages penalized by AI issues ratio
+  const allPages = pageScores.length;
+  const ai = softCategories.find(c => c.name.includes('AI') || c.name.includes('ai'));
+  // Count pages with AI issues from the AI category detail (passed via soft categories)
+  // Instead, use a simpler approach: if AI category has warnings/fails, reduce page quality
+  let pageQuality: number;
+  if (allPages > 0) {
+    const avgPageScore = pageScores.reduce((s, p) => s + p.score, 0) / allPages;
+    pageQuality = avgPageScore;
+  } else {
+    pageQuality = 100;
   }
 
-  // 2. Compute weighted page average (max 55 points for pages)
-  const PAGE_TOTAL_WEIGHT = 55;
-  let pageWeightedSum = 0;
-  let pageWeightTotal = 0;
-  for (const [, data] of Object.entries(pageTypeScores)) {
-    const avg = data.total / data.count;
-    const weight = data.weight * data.count;
-    pageWeightedSum += avg * weight;
-    pageWeightTotal += weight;
+  // 2b. AI analysis score
+  let aiScore = 100;
+  if (ai && ai.items.length > 0) {
+    aiScore = ai.items.reduce((sum, item) => sum + statusToScore(item.status), 0) / ai.items.length;
   }
-  const pageAvg = pageWeightTotal > 0 ? pageWeightedSum / pageWeightTotal : 0;
-  const pageContribution = (pageAvg / 100) * PAGE_TOTAL_WEIGHT;
 
-  // 3. Compute site category scores (max 45 points for site checks)
-  const SITE_TOTAL_WEIGHT = 45;
-  const allCategoryScores: CategoryScore[] = [];
-  let siteWeightedSum = 0;
-  let siteWeightTotal = 0;
-
-  for (const cs of siteCategoryScores) {
-    const catScore = cs.maxScore > 0 ? (cs.score / cs.maxScore) * 100 : 0;
-    let weight = 8; // default weight for categories not explicitly listed
-    for (const [pattern, w] of Object.entries(SITE_CATEGORY_WEIGHT)) {
-      if (cs.name.includes(pattern)) { weight = w; break; }
+  // 2c. Content quality score (other soft categories excluding AI)
+  const contentCats = softCategories.filter(c => c !== ai);
+  let contentScore = 100;
+  if (contentCats.length > 0) {
+    let totalEarned = 0;
+    let totalItems = 0;
+    for (const cat of contentCats) {
+      for (const item of cat.items) {
+        totalEarned += statusToScore(item.status);
+        totalItems++;
+      }
     }
-    siteWeightedSum += catScore * weight;
-    siteWeightTotal += weight;
-    allCategoryScores.push({ name: cs.name, score: Math.round(catScore), maxScore: 100 });
+    contentScore = totalItems > 0 ? totalEarned / totalItems : 100;
   }
 
-  const siteAvg = siteWeightTotal > 0 ? siteWeightedSum / siteWeightTotal : 0;
-  const siteContribution = (siteAvg / 100) * SITE_TOTAL_WEIGHT;
+  // 2d. UX score (extracted from contentCats if present)
+  let uxScore = 100;
 
-  // 4. Combine
-  const compositeScore = Math.round(pageContribution + siteContribution);
+  // Weighted soft score
+  const softScore = Math.round(
+    pageQuality * SOFT_WEIGHTS.pageQuality +
+    aiScore * SOFT_WEIGHTS.aiAnalysis +
+    contentScore * SOFT_WEIGHTS.contentQuality +
+    uxScore * SOFT_WEIGHTS.userExperience
+  );
 
-  return {
-    compositeScore: Math.min(100, Math.max(0, compositeScore)),
-    categoryScores: allCategoryScores,
-  };
+  // 3. Warning penalty (multiplicative)
+  const allItems = [...hardItems, ...softCategories.flatMap(c => c.items)];
+  const totalWarn = allItems.filter(i => i.status === 'warn').length;
+  const totalAll = allItems.length;
+  const warningRatio = totalAll > 0 ? totalWarn / totalAll : 0;
+  const warningPenalty = warningRatio > 0.05 ? Math.round((warningRatio - 0.05) * 200) : 0;
+
+  // 4. Composite
+  const base = hardPassRate * HARD_COMPOSITE_WEIGHT + softScore * SOFT_COMPOSITE_WEIGHT;
+  const compositeScore = Math.min(100, Math.max(0, Math.round(base - warningPenalty)));
+
+  // Category scores for display
+  const categoryScores: CategoryScore[] = [];
+  for (const cat of [...hardCategories, ...softCategories]) {
+    categoryScores.push(scoreCategory(cat));
+  }
+
+  return { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty };
 }

@@ -1,4 +1,4 @@
-import type { CheckReport, CheckOptions, CheckCategory, PageDetail, Lang, SiteType } from './types.js';
+import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType } from './types.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
@@ -39,8 +39,9 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
       if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
     }
     const pageType = classifyPage(page.url);
-    const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType);
     const ai = aiMap.get(page.url);
+    const aiStatus = ai?.status;
+    const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
     if (ai) detail.ai = { status: ai.status, assessment: ai.assessment, suggestions: ai.suggestions };
     return detail;
@@ -166,54 +167,79 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const typeResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
     const siteType = typeResult.type;
 
-    // Checks
-    const categories: CheckCategory[] = [];
-    categories.push(checkContentQuality(uniquePages, allInternal.length, lang, siteType, allSignals));
-    categories.push(await checkRequiredPages({ allLinks: homeData.linkDetails, navText: homeData.navText, footerText: homeData.footerText, sitemapUrls }, lang));
-    categories.push(await checkSiteStructure(origin, homeData.links, h1Count, deadLinks, lang));
+    // Checks - build categories with group assignments
+    const allCategories: CheckCategory[] = [];
 
+    // Content quality → soft
+    const contentCat = checkContentQuality(uniquePages, allInternal.length, lang, siteType, allSignals);
+    // Extract site scale → hard (it's a hard requirement: min 10 pages)
+    const scaleItem = contentCat.items.find(i => i.name === t('item.content.scale', lang));
+    const contentItems = scaleItem ? contentCat.items.filter(i => i !== scaleItem) : contentCat.items;
+    allCategories.push({ name: contentCat.name, items: contentItems, group: 'soft' });
+    if (scaleItem) {
+      allCategories.push({ name: t('group.site_scale', lang), items: [scaleItem], group: 'hard' });
+    }
+
+    // Required pages → hard
+    const pagesCat = await checkRequiredPages({ allLinks: homeData.linkDetails, navText: homeData.navText, footerText: homeData.footerText, sitemapUrls }, lang);
+    allCategories.push({ ...pagesCat, group: 'hard' });
+
+    // Structure → hard
+    const structCat = await checkSiteStructure(origin, homeData.links, h1Count, deadLinks, lang);
+    allCategories.push({ ...structCat, group: 'hard' });
+
+    // Performance → split: hard (speed, viewport, overflow) + soft (font, popup)
     const playBrowser = await browser.launch();
     const perfPage = await browser.newPage();
-    categories.push(await checkPerformance(perfPage, url, playBrowser, lang));
+    const perfCat = await checkPerformance(perfPage, url, playBrowser, lang);
     await perfPage.close();
+    const hardPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
+    const hardPerfItems = perfCat.items.filter(i => hardPerfNames.includes(i.name));
+    const softPerfItems = perfCat.items.filter(i => !hardPerfNames.includes(i.name));
+    if (hardPerfItems.length > 0) allCategories.push({ name: t('group.performance_min', lang), items: hardPerfItems, group: 'hard' });
+    if (softPerfItems.length > 0) allCategories.push({ name: t('group.user_experience', lang), items: softPerfItems, group: 'soft' });
 
-    categories.push(checkPolicyCompliance(uniquePages, lang));
+    // Policy → hard
+    const policyCat = checkPolicyCompliance(uniquePages, lang);
+    allCategories.push({ ...policyCat, group: 'hard' });
 
-    // AI
+    // AI → soft
     let pageAnalyses: PageAiAnalysis[] = [];
     if (!skipAi) {
       try {
         const aiResult = await analyzeWithAI(uniquePages, lang, apiKey);
         pageAnalyses = aiResult.pageAnalyses;
-        const aiCategory: CheckCategory = {
-          name: t('cat.ai', lang),
-          items: [
-            { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },
-            { name: t('item.ai.originality', lang), status: aiResult.originality.status, message: aiResult.originality.detail.slice(0, 200) },
-            { name: t('item.ai.compliance', lang), status: aiResult.compliance.status, message: aiResult.compliance.detail.slice(0, 200) },
-          ],
-        };
+        const aiItems: CheckItem[] = [
+          { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },
+          { name: t('item.ai.originality', lang), status: aiResult.originality.status, message: aiResult.originality.detail.slice(0, 200) },
+          { name: t('item.ai.compliance', lang), status: aiResult.compliance.status, message: aiResult.compliance.detail.slice(0, 200) },
+        ];
         if (aiResult.suggestions.length > 0) {
-          aiCategory.items.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detail: aiResult.suggestions.join('; ') });
+          aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detail: aiResult.suggestions.join('; ') });
         }
-        categories.push(aiCategory);
+        allCategories.push({ name: t('group.ai_analysis', lang), items: aiItems, group: 'soft' });
       } catch (err) {
-        categories.push({ name: t('cat.ai', lang), items: [{ name: 'AI', status: 'skip', message: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) }] });
+        allCategories.push({ name: t('group.ai_analysis', lang), items: [{ name: 'AI', status: 'skip', message: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) }], group: 'soft' });
       }
     }
 
     const pageDetails = buildPageDetails(uniquePages, pageAnalyses, siteType);
-    const allItems = categories.flatMap(c => c.items);
 
-    // Compute composite score
+    // Separate hard/soft categories
+    const hardCategories = allCategories.filter(c => c.group === 'hard');
+    const softCategories = allCategories.filter(c => c.group === 'soft');
+    const allItems = allCategories.flatMap(c => c.items);
+
+    // Compute composite score with new two-group system
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
-    const siteCategoryScores = categories.map(c => scoreCategory(c));
-    const { compositeScore, categoryScores } = computeCompositeScore(pageScoresForComposite, siteCategoryScores);
+    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories);
 
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence: typeResult.confidence,
-      categories,
+      categories: allCategories,
+      hardCategories,
+      softCategories,
       score: allItems.filter(i => i.status === 'pass').length,
       totalChecks: allItems.length,
       passed: allItems.filter(i => i.status === 'pass').length,
@@ -223,6 +249,10 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       pages: pageDetails,
       compositeScore,
       categoryScores,
+      hardStatus,
+      softScore,
+      warningRatio,
+      warningPenalty,
     };
   } finally {
     await browser.close();

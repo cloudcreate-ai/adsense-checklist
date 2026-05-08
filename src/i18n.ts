@@ -135,6 +135,26 @@ const en: Record<string, string> = {
   'report.saved': 'Report saved',
   'report.page_details': 'Page Details',
   'report.content_label': 'Content',
+
+  // Two-group scoring
+  'report.hard_requirements': 'Hard Requirements',
+  'report.soft_scoring': 'Soft Scoring',
+  'report.hard.ready': 'READY — all requirements met',
+  'report.hard.warn': 'NEEDS FIXES — {count} warning(s) to address',
+  'report.hard.fail': 'NOT READY — {count} failure(s) must be fixed',
+  'report.warning_ratio': 'Warning ratio: {count}/{total} ({pct}%)',
+  'report.warning_penalty': 'Score penalty: -{points}',
+
+  // Group labels
+  'group.required_pages': 'Required Pages',
+  'group.basic_structure': 'Basic Structure',
+  'group.performance_min': 'Performance Baseline',
+  'group.policy': 'Policy Compliance',
+  'group.site_scale': 'Site Scale',
+  'group.content_quality': 'Content Quality',
+  'group.ai_analysis': 'AI Content Analysis',
+  'group.page_quality': 'Page Quality',
+  'group.user_experience': 'User Experience',
 };
 
 // ─── 中文消息 ───────────────────────────────────────────────────────
@@ -272,6 +292,26 @@ const zh: Record<string, string> = {
   'report.saved': '报告已保存',
   'report.page_details': '逐页详情',
   'report.content_label': '正文',
+
+  // 两组评分
+  'report.hard_requirements': '硬性要求',
+  'report.soft_scoring': '柔性评分',
+  'report.hard.ready': 'READY — 所有必要项达标',
+  'report.hard.warn': 'NEEDS FIXES — {count} 项警告待修复',
+  'report.hard.fail': 'NOT READY — {count} 项失败必须修复',
+  'report.warning_ratio': '警告比例: {count}/{total} ({pct}%)',
+  'report.warning_penalty': '扣分: -{points}',
+
+  // 分组标签
+  'group.required_pages': '必要页面',
+  'group.basic_structure': '基础结构',
+  'group.performance_min': '性能底线',
+  'group.policy': '政策合规',
+  'group.site_scale': '站点规模',
+  'group.content_quality': '内容质量',
+  'group.ai_analysis': 'AI 内容分析',
+  'group.page_quality': '页面质量',
+  'group.user_experience': '用户体验',
 };
 
 // ─── Language registry ──────────────────────────────────────────────

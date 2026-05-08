@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import figures from 'figures';
-import type { CheckReport, CheckStatus, PageDetail, Lang, SiteType } from './types.js';
+import type { CheckReport, CheckStatus, CheckCategory, PageDetail, Lang, SiteType } from './types.js';
 import { t } from './i18n.js';
 
 const ICONS: Record<CheckStatus, string> = {
@@ -17,19 +17,22 @@ const LABELS: Record<CheckStatus, string> = {
   skip: chalk.gray('SKIP'),
 };
 
-function summary(report: CheckReport): string {
-  const lang = report.lang;
-  if (report.failed > 0) return chalk.red.bold(t('report.notready', lang, { count: report.failed }));
-  if (report.warned > 0) return chalk.yellow.bold(t('report.mostly', lang, { count: report.warned }));
-  return chalk.green.bold(t('report.ready', lang));
-}
-
 function renderBar(score: number, max: number, width: number = 20): string {
   const ratio = max > 0 ? score / max : 0;
   const filled = Math.round(ratio * width);
   const empty = width - filled;
   const color = ratio >= 0.8 ? chalk.green : ratio >= 0.5 ? chalk.yellow : chalk.red;
   return color('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
+}
+
+function categoryScore(cat: CheckCategory): number {
+  if (cat.items.length === 0) return 100;
+  const earned = cat.items.reduce((s, i) => {
+    if (i.status === 'pass') return s + 100;
+    if (i.status === 'warn') return s + 40;
+    return s;
+  }, 0);
+  return Math.round(earned / cat.items.length);
 }
 
 export function renderTerminalReport(report: CheckReport): string {
@@ -52,7 +55,49 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.bold(`  ${t('report.composite_score', lang)}: `) + scoreColor(`${report.compositeScore}/100`));
   lines.push('');
 
-  // Category score breakdown
+  // ── Hard Requirements ──
+  const hardColor = report.hardStatus === 'ready' ? chalk.green : report.hardStatus === 'warn' ? chalk.yellow : chalk.red;
+  const hardLabel = report.hardStatus === 'ready' ? 'PASS' : report.hardStatus === 'warn' ? 'WARN' : 'FAIL';
+  lines.push(chalk.bold(`  ┌─ ${t('report.hard_requirements', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.hard_requirements', lang).length))) + ` ${hardColor.bold(hardLabel)}`);
+  for (const cat of report.hardCategories) {
+    const catScore = categoryScore(cat);
+    const catIcon = cat.items.every(i => i.status === 'pass') ? ICONS.pass : cat.items.some(i => i.status === 'fail') ? ICONS.fail : ICONS.warn;
+    for (const item of cat.items) {
+      lines.push(`  │  ${ICONS[item.status]} ${chalk.bold(item.name.padEnd(16))} ${item.message}`);
+    }
+  }
+  const hardStatusKey = `report.hard.${report.hardStatus}` as string;
+  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
+  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
+  const hardStatusMsg = report.hardStatus === 'ready'
+    ? t(hardStatusKey, lang)
+    : t(hardStatusKey, lang, { count: report.hardStatus === 'fail' ? hardFailCount : hardWarnCount });
+  lines.push(chalk.gray(`  │`));
+  lines.push(`  └─ ${t('report.score', lang)}: ${hardStatusMsg}`);
+  lines.push('');
+
+  // ── Soft Scoring ──
+  lines.push(chalk.bold(`  ┌─ ${t('report.soft_scoring', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.soft_scoring', lang).length))) + ` ${scoreColor(report.softScore + '/100')}`);
+  for (const cat of report.softCategories) {
+    const score = categoryScore(cat);
+    const bar = renderBar(score, 100);
+    const pct = `${score}%`;
+    lines.push(`  │  ${bar} ${pct.padStart(4)}  ${cat.name}`);
+  }
+  if (report.warningPenalty > 0) {
+    lines.push(chalk.gray(`  │`));
+    lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
+  }
+  lines.push(chalk.gray(`  │`));
+
+  // Composite breakdown
+  const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
+  const softContrib = Math.round(report.softScore * 0.6);
+  lines.push(chalk.gray(`  │  Hard ${Math.round(hardContrib)}% × 0.4 + Soft ${report.softScore}% × 0.6 - Penalty ${report.warningPenalty} = ${report.compositeScore}`));
+  lines.push(chalk.gray(`  └─`));
+  lines.push('');
+
+  // Category score breakdown (bars)
   if (report.categoryScores.length > 0) {
     for (const cs of report.categoryScores) {
       const bar = renderBar(cs.score, cs.maxScore);
@@ -87,7 +132,17 @@ export function renderTerminalReport(report: CheckReport): string {
   }
 
   lines.push(chalk.bold(`  ${t('report.score', lang)}: `) + `${report.score}/${report.totalChecks}`);
-  lines.push(`  ${summary(report)}`);
+
+  // Summary line
+  if (report.hardStatus === 'fail') {
+    lines.push(chalk.red.bold(`  ${t('report.notready', lang, { count: hardFailCount })}`));
+  } else if (report.hardStatus === 'warn') {
+    lines.push(chalk.yellow.bold(`  ${t('report.hard.warn', lang, { count: hardWarnCount })}`));
+  } else if (report.warned > 0) {
+    lines.push(chalk.yellow.bold(`  ${t('report.mostly', lang, { count: report.warned })}`));
+  } else {
+    lines.push(chalk.green.bold(`  ${t('report.ready', lang)}`));
+  }
   lines.push('');
   return lines.join('\n');
 }

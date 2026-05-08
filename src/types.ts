@@ -10,9 +10,12 @@ export interface CheckItem {
   detail?: string;
 }
 
+export type CheckGroup = 'hard' | 'soft';
+
 export interface CheckCategory {
   name: string;
   items: CheckItem[];
+  group?: CheckGroup;
 }
 
 export interface PageDetail {
@@ -45,6 +48,8 @@ export interface CheckReport {
   siteType: SiteType;
   siteTypeConfidence: 'high' | 'medium' | 'low';
   categories: CheckCategory[];
+  hardCategories: CheckCategory[];
+  softCategories: CheckCategory[];
   score: number;
   totalChecks: number;
   passed: number;
@@ -54,6 +59,10 @@ export interface CheckReport {
   pages: PageDetail[];
   compositeScore: number;          // 0-100 weighted total
   categoryScores: CategoryScore[]; // breakdown by category
+  hardStatus: 'ready' | 'warn' | 'fail';
+  softScore: number;               // 0-100 soft scoring result
+  warningRatio: number;            // 0-1
+  warningPenalty: number;          // points deducted
 }
 
 export interface CheckOptions {
