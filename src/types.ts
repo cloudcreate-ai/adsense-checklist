@@ -1,4 +1,7 @@
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
+export type Lang = string;
+export type SiteType = 'content' | 'game';
+export type PageType = 'homepage' | 'content' | 'game_detail' | 'required' | 'listing' | 'utility' | 'unknown';
 
 export interface CheckItem {
   name: string;
@@ -15,11 +18,13 @@ export interface CheckCategory {
 export interface PageDetail {
   url: string;
   title: string;
+  pageType: PageType;
   totalChars: number;
   contentChars: number;
   contentRatio: number;
   contentStatus: CheckStatus;
   issues: string[];
+  score: number;    // 0-100 per-page score
   ai?: {
     status: CheckStatus;
     assessment: string;
@@ -27,9 +32,18 @@ export interface PageDetail {
   };
 }
 
+export interface CategoryScore {
+  name: string;
+  score: number;
+  maxScore: number;
+}
+
 export interface CheckReport {
   url: string;
   timestamp: string;
+  lang: Lang;
+  siteType: SiteType;
+  siteTypeConfidence: 'high' | 'medium' | 'low';
   categories: CheckCategory[];
   score: number;
   totalChecks: number;
@@ -38,12 +52,16 @@ export interface CheckReport {
   failed: number;
   skipped: number;
   pages: PageDetail[];
+  compositeScore: number;          // 0-100 weighted total
+  categoryScores: CategoryScore[]; // breakdown by category
 }
 
 export interface CheckOptions {
   url: string;
-  depth?: number;
+  maxPages?: number;
+  siteType?: SiteType;
   skipAi?: boolean;
   timeout?: number;
   apiKey?: string;
+  lang?: Lang;
 }

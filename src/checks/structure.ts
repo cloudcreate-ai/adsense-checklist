@@ -1,88 +1,26 @@
-import type { CheckCategory, CheckItem } from '../types.js';
+import type { CheckCategory, CheckItem, Lang } from '../types.js';
+import { t } from '../i18n.js';
 import { checkRobotsTxt, checkSitemap } from '../browser.js';
 
 export async function checkSiteStructure(
-  origin: string,
-  links: string[],
-  h1Count: number,
-  deadLinks: string[] = []
+  origin: string, links: string[], h1Count: number, deadLinks: string[] = [], lang: Lang
 ): Promise<CheckCategory> {
   const items: CheckItem[] = [];
 
-  // H1 uniqueness
-  if (h1Count === 1) {
-    items.push({
-      name: 'H1 标签',
-      status: 'pass',
-      message: '页面有且仅有一个 H1 标签',
-    });
-  } else if (h1Count === 0) {
-    items.push({
-      name: 'H1 标签',
-      status: 'warn',
-      message: '页面缺少 H1 标签',
-    });
-  } else {
-    items.push({
-      name: 'H1 标签',
-      status: 'warn',
-      message: `页面有 ${h1Count} 个 H1 标签（建议保留 1 个）`,
-    });
-  }
+  if (h1Count === 1) items.push({ name: 'H1', status: 'pass', message: t('structure.h1.pass', lang) });
+  else if (h1Count === 0) items.push({ name: 'H1', status: 'warn', message: t('structure.h1.warn_none', lang) });
+  else items.push({ name: 'H1', status: 'warn', message: t('structure.h1.warn_multi', lang, { count: h1Count }) });
 
-  // robots.txt
   const hasRobots = await checkRobotsTxt(origin);
-  items.push({
-    name: 'robots.txt',
-    status: hasRobots ? 'pass' : 'warn',
-    message: hasRobots ? 'robots.txt 存在' : '未找到 robots.txt（建议添加）',
-  });
+  items.push({ name: 'robots.txt', status: hasRobots ? 'pass' : 'warn', message: t(hasRobots ? 'structure.robots.pass' : 'structure.robots.warn', lang) });
 
-  // sitemap
   const hasSitemap = await checkSitemap(origin);
-  items.push({
-    name: 'sitemap.xml',
-    status: hasSitemap ? 'pass' : 'warn',
-    message: hasSitemap ? 'sitemap.xml 存在' : '未找到 sitemap.xml（建议添加）',
-  });
+  items.push({ name: 'sitemap.xml', status: hasSitemap ? 'pass' : 'warn', message: t(hasSitemap ? 'structure.sitemap.pass' : 'structure.sitemap.warn', lang) });
 
-  // Internal link structure
-  const internalLinks = links.filter(l => {
-    try {
-      return new URL(l).origin === origin;
-    } catch {
-      return false;
-    }
-  });
-  if (internalLinks.length >= 5) {
-    items.push({
-      name: '内部链接',
-      status: 'pass',
-      message: `首页有 ${internalLinks.length} 个内部链接`,
-    });
-  } else {
-    items.push({
-      name: '内部链接',
-      status: 'warn',
-      message: `首页仅 ${internalLinks.length} 个内部链接（建议增加导航链接）`,
-    });
-  }
+  const internal = links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } });
+  items.push({ name: t('item.structure.internal', lang), status: internal.length >= 5 ? 'pass' : 'warn', message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }) });
 
-  // Dead links
-  if (deadLinks.length > 0) {
-    items.push({
-      name: '死链检测',
-      status: 'fail',
-      message: `检测到 ${deadLinks.length} 个死链`,
-      detail: deadLinks.join(', '),
-    });
-  } else {
-    items.push({
-      name: '死链检测',
-      status: 'pass',
-      message: '未检测到死链',
-    });
-  }
+  items.push({ name: t('item.structure.deadlinks', lang), status: deadLinks.length > 0 ? 'fail' : 'pass', message: t(deadLinks.length > 0 ? 'structure.deadlinks.fail' : 'structure.deadlinks.pass', lang, { count: deadLinks.length }), detail: deadLinks.length > 0 ? deadLinks.join(', ') : undefined });
 
-  return { name: 'Site Structure', items };
+  return { name: t('cat.structure', lang), items };
 }

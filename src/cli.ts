@@ -4,17 +4,16 @@ import 'dotenv/config';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { check } from './checker.js';
 import { renderTerminalReport, renderJsonReport } from './reporter.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { t, isValidLang, getSupportedLangs } from './i18n.js';
+import type { Lang, SiteType } from './types.js';
 
 function formatTimestamp(): string {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
 function getDomain(url: string): string {
@@ -28,25 +27,21 @@ program
   .description('Check if a website meets Google AdSense review requirements')
   .version('1.0.0')
   .argument('<url>', 'Website URL to check')
-  .option('-j, --json', 'Output as JSON to stdout')
-  .option('-d, --depth <number>', 'Number of internal pages to crawl', '10')
-  .option('-s, --skip-ai', 'Skip AI content analysis', false)
-  .option('-t, --timeout <ms>', 'Page load timeout in milliseconds', '30000')
-  .option('--api-key <key>', 'AI API key (or set AI_API_KEY in .env)')
+  .option('-j, --json', 'Output JSON to stdout')
+  .option('-m, --max-pages <number>', 'Max subpages to crawl', '10')
+  .option('-s, --skip-ai', 'Skip AI analysis', false)
+  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('--api-key <key>', 'AI API key')
   .option('-o, --output <dir>', 'Report output directory', 'tmp')
-  .option('--no-save', 'Skip auto-saving report files')
+  .option('--no-save', 'Skip auto-saving report')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('--type <type>', 'Force site type (content|game), skip auto-detection')
   .action(async (url: string, opts) => {
-    // Validate URL
-    try {
-      new URL(url);
-    } catch {
-      console.error(chalk.red(`Error: Invalid URL "${url}"`));
-      process.exit(1);
-    }
+    try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
+    if (!url.startsWith('http')) url = 'https://' + url;
 
-    if (!url.startsWith('http')) {
-      url = 'https://' + url;
-    }
+    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+    const siteType: SiteType | undefined = opts.type === 'game' || opts.type === 'content' ? opts.type : undefined;
 
     const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
     let frame = 0;
@@ -57,37 +52,31 @@ program
     try {
       const report = await check({
         url,
-        depth: parseInt(opts.depth, 10),
+        maxPages: parseInt(opts.maxPages, 10),
+        siteType,
         skipAi: opts.skipAi,
         timeout: parseInt(opts.timeout, 10),
         apiKey: opts.apiKey,
+        lang,
       });
 
       clearInterval(interval);
       process.stderr.write('\r' + ' '.repeat(60) + '\r');
 
-      if (opts.json) {
-        console.log(renderJsonReport(report));
-      } else {
-        console.log(renderTerminalReport(report));
-      }
+      if (opts.json) console.log(renderJsonReport(report));
+      else console.log(renderTerminalReport(report));
 
-      // Auto-save report files
+      // Auto-save
       if (opts.save !== false) {
         const ts = formatTimestamp();
         const domain = getDomain(url);
         const outDir = join(process.cwd(), opts.output);
-
         try {
           mkdirSync(outDir, { recursive: true });
-
-          const jsonPath = join(outDir, `${domain}-${ts}.json`);
-          writeFileSync(jsonPath, renderJsonReport(report), 'utf-8');
-
-          console.log(chalk.gray(`  Report saved: ${jsonPath}`));
-        } catch (saveErr) {
-          console.error(chalk.yellow(`  Warning: Failed to save report: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`));
-        }
+          const path = join(outDir, `${domain}-${ts}.json`);
+          writeFileSync(path, renderJsonReport(report), 'utf-8');
+          console.log(chalk.gray(`  ${t('report.saved', lang)}: ${path}`));
+        } catch {}
       }
 
       process.exit(report.failed > 0 ? 1 : 0);

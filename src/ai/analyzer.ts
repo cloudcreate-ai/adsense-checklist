@@ -1,3 +1,6 @@
+import type { Lang } from '../types.js';
+import { t } from '../i18n.js';
+
 export interface AiAnalysis {
   contentQuality: { status: 'pass' | 'warn' | 'fail'; detail: string };
   originality: { status: 'pass' | 'warn' | 'fail'; detail: string };
@@ -59,13 +62,118 @@ function extractJson(text: string): any {
   throw new Error('No JSON found in response');
 }
 
+const AI_LANG_NAMES: Record<string, string> = {
+  en: 'English',
+  zh: '中文',
+};
+
+function getAiLangName(lang: string): string {
+  return AI_LANG_NAMES[lang] ?? lang;
+}
+
+const PAGE_CHARS = 5000;
+const CONCURRENCY = 3;
+
+async function analyzePage(
+  page: { url: string; text: string },
+  langName: string,
+  date: string
+): Promise<PageAiAnalysis> {
+  const content = page.text.slice(0, PAGE_CHARS);
+
+  const prompt = `You are a Google AdSense review expert. Analyze this page for "low value content" issues.
+Current date: ${date}
+Reply language: ${langName}
+
+Low value content signs:
+- Thin content lacking substantial information
+- Machine-generated or scraped content
+- No unique value for users
+- Padded/repetitive content to fill space
+- Template-like structure with minimal real content
+
+Page: ${page.url}
+
+Content:
+${content}
+
+Reply in ${langName} with JSON:
+{
+  "status": "pass|warn|fail",
+  "assessment": "Detailed assessment: content depth, originality, user value, specific issues found",
+  "suggestions": ["Specific actionable suggestion to improve this page"]
+}`;
+
+  try {
+    const text = await callAI(prompt, 2048);
+    const result = extractJson(text);
+    return {
+      url: page.url,
+      status: result.status ?? 'warn',
+      assessment: result.assessment ?? '',
+      suggestions: result.suggestions ?? [],
+    };
+  } catch (err) {
+    return {
+      url: page.url,
+      status: 'warn' as const,
+      assessment: `Analysis failed: ${err instanceof Error ? err.message : String(err)}`,
+      suggestions: [],
+    };
+  }
+}
+
+async function analyzeOverall(
+  pageAnalyses: PageAiAnalysis[],
+  langName: string,
+  date: string
+): Promise<{ contentQuality: AiAnalysis['contentQuality']; originality: AiAnalysis['originality']; compliance: AiAnalysis['compliance']; suggestions: string[] }> {
+  const summaries = pageAnalyses.map((p, i) =>
+    `Page ${i + 1} (${p.url}): [${p.status}] ${p.assessment.slice(0, 200)}`
+  ).join('\n');
+
+  const prompt = `You are a Google AdSense review expert. Based on per-page analyses below, give an overall site assessment.
+Current date: ${date}
+Reply language: ${langName}
+
+Per-page results:
+${summaries}
+
+Based on these results, provide an overall assessment in ${langName} with JSON:
+{
+  "contentQuality": { "status": "pass|warn|fail", "detail": "Overall content value assessment considering all pages" },
+  "originality": { "status": "pass|warn|fail", "detail": "Overall originality assessment across the site" },
+  "compliance": { "status": "pass|warn|fail", "detail": "Overall AdSense policy compliance" },
+  "suggestions": ["Top priority site-wide improvement suggestion"]
+}`;
+
+  try {
+    const text = await callAI(prompt, 2048);
+    const result = extractJson(text);
+    return {
+      contentQuality: result.contentQuality ?? { status: 'warn', detail: 'Parse error' },
+      originality: result.originality ?? { status: 'warn', detail: 'Parse error' },
+      compliance: result.compliance ?? { status: 'warn', detail: 'Parse error' },
+      suggestions: result.suggestions ?? [],
+    };
+  } catch {
+    return {
+      contentQuality: { status: 'warn' as const, detail: 'Overall analysis failed' },
+      originality: { status: 'warn' as const, detail: 'N/A' },
+      compliance: { status: 'warn' as const, detail: 'N/A' },
+      suggestions: [],
+    };
+  }
+}
+
 export async function analyzeWithAI(
   pages: Array<{ url: string; text: string }>,
+  lang: string = 'en',
   apiKey?: string
 ): Promise<FullAiAnalysis> {
   const key = apiKey || getApiKey();
   const empty: FullAiAnalysis = {
-    contentQuality: { status: 'skip' as any, detail: '未配置 AI_API_KEY，跳过 AI 分析' },
+    contentQuality: { status: 'skip' as any, detail: t('ai.skip', lang) },
     originality: { status: 'skip' as any, detail: 'N/A' },
     compliance: { status: 'skip' as any, detail: 'N/A' },
     suggestions: [],
@@ -73,65 +181,31 @@ export async function analyzeWithAI(
   };
   if (!key) return empty;
 
-  // Limit pages to avoid token overflow (max 8 pages, 1500 chars each)
-  const sampled = pages.slice(0, 8);
-  const pageContents = sampled
-    .map((p, i) => `=== 页面 ${i + 1}: ${p.url} ===\n${p.text.slice(0, 1500)}`)
-    .join('\n\n');
-
-  const prompt = `你是一个 Google AdSense 审核专家，专门判断网站是否存在 "low value content" 问题。
-当前日期：${new Date().toISOString().slice(0, 10)}
-
-AdSense 最常见的拒绝理由是 "low value content"（低价值内容），表现包括：
-- 页面内容太薄，缺乏实质性信息
-- 内容像是机器批量生成或从其他网站采集的
-- 网站没有为用户提供独特的价值
-- 内容空洞，大量凑字数、重复表述
-- 多个页面内容高度雷同，只是换了关键词
-
-请分析以下 ${sampled.length} 个页面，返回 JSON：
-
-{
-  "overall": {
-    "contentQuality": { "status": "pass|warn|fail", "detail": "整体内容价值评估..." },
-    "originality": { "status": "pass|warn|fail", "detail": "整体原创性评估..." },
-    "compliance": { "status": "pass|warn|fail", "detail": "整体合规性评估..." },
-    "suggestions": ["改进建议1", "改进建议2"]
-  },
-  "pages": [
-    {
-      "url": "页面URL",
-      "status": "pass|warn|fail",
-      "assessment": "该页面的具体评估，说明内容价值、问题所在",
-      "suggestions": ["针对该页面的具体改进建议"]
-    }
-  ]
-}
-
-页面内容：
-
-${pageContents}`;
+  const langName = getAiLangName(lang);
+  const date = new Date().toISOString().slice(0, 10);
 
   try {
-    const text = await callAI(prompt, 4096);
-    const result = extractJson(text);
+    // Phase 1: Analyze each page individually (concurrency-limited)
+    const pageAnalyses: PageAiAnalysis[] = [];
+    for (let i = 0; i < pages.length; i += CONCURRENCY) {
+      const batch = pages.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(p => analyzePage(p, langName, date))
+      );
+      pageAnalyses.push(...results);
+    }
+
+    // Phase 2: Overall assessment based on per-page results
+    const overall = await analyzeOverall(pageAnalyses, langName, date);
 
     return {
-      contentQuality: result.overall?.contentQuality ?? { status: 'warn', detail: '解析异常' },
-      originality: result.overall?.originality ?? { status: 'warn', detail: '解析异常' },
-      compliance: result.overall?.compliance ?? { status: 'warn', detail: '解析异常' },
-      suggestions: result.overall?.suggestions ?? [],
-      pageAnalyses: (result.pages ?? []).map((p: any) => ({
-        url: p.url,
-        status: p.status ?? 'warn',
-        assessment: p.assessment ?? '',
-        suggestions: p.suggestions ?? [],
-      })),
+      ...overall,
+      pageAnalyses,
     };
   } catch (err) {
     return {
       ...empty,
-      contentQuality: { status: 'warn', detail: `AI 分析失败: ${err instanceof Error ? err.message : String(err)}` },
+      contentQuality: { status: 'warn', detail: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) },
     };
   }
 }

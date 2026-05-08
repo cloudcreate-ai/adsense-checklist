@@ -1,4 +1,5 @@
 import { chromium, type Browser, type Page } from 'playwright';
+import type { PageSignals } from './detector.js';
 
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -66,7 +67,40 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
   });
   const title = await page.title();
 
-  return { status, content, text, links, linkDetails, navText, footerText, title, url };
+  const signals: PageSignals = await page.evaluate(() => {
+    const AD_DOMAINS = /googlesyndication|doubleclick|adservice|adsense|pagead|adnxs|amazon-adsystem|facebook\.com\/plugins/i;
+
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    const visibleIframes = iframes.filter(f => {
+      const rect = f.getBoundingClientRect();
+      const style = getComputedStyle(f);
+      if (rect.width <= 50 || rect.height <= 50) return false;
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const src = f.src || f.getAttribute('data-src') || f.getAttribute('data-lazy-src') || '';
+      if (AD_DOMAINS.test(src)) return false;
+      return true;
+    });
+    const iframeSrcs = visibleIframes.map(f =>
+      f.src || f.getAttribute('data-src') || f.getAttribute('data-lazy-src') || f.getAttribute('data-lazyloaded-src') || ''
+    ).filter(Boolean);
+
+    // Game link patterns (for listing pages without iframes)
+    const gameLinkPatterns = /\/(game|play|games)\//i;
+    const gameLinks = Array.from(document.querySelectorAll('a[href]')).filter(a =>
+      gameLinkPatterns.test((a as HTMLAnchorElement).href)
+    ).length;
+
+    return {
+      iframeCount: visibleIframes.length,
+      iframeSrcs,
+      canvasCount: document.querySelectorAll('canvas').length,
+      articleCount: document.querySelectorAll('article').length,
+      textLength: (document.body?.innerText ?? '').replace(/\s+/g, '').length,
+      gameLinks,
+    };
+  });
+
+  return { status, content, text, links, linkDetails, navText, footerText, title, url, signals };
 }
 
 export async function extractLinks(page: Page): Promise<string[]> {
