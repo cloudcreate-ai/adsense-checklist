@@ -1,4 +1,4 @@
-import type { Lang, SiteTheme } from '../types.js';
+import type { Lang, SiteTopic } from '../types.js';
 import { t } from '../i18n.js';
 
 export interface AiAnalysis {
@@ -79,18 +79,18 @@ async function analyzePage(
   page: { url: string; text: string },
   langName: string,
   date: string,
-  theme?: SiteTheme
+  siteTopic?: SiteTopic
 ): Promise<PageAiAnalysis> {
   const content = page.text.slice(0, PAGE_CHARS);
 
-  const themeContext = theme
-    ? `\nSite theme: ${theme.topic}\nSite type: ${theme.type}\nSite description: ${theme.description}\n\nEvaluate whether this page is relevant to the site's theme and provides value to users interested in "${theme.topic}".`
+  const topicContext = siteTopic
+    ? `\nSite topic: ${siteTopic.topic}\nSite type: ${siteTopic.type}\nSite description: ${siteTopic.description}\n\nEvaluate whether this page is relevant to the site's topic and provides value to users interested in "${siteTopic.topic}".`
     : '';
 
   const prompt = `You are a Google AdSense review expert. Analyze this page for "low value content" issues.
 Current date: ${date}
 Reply language: ${langName}
-${themeContext}
+${topicContext}
 
 Low value content signs:
 - Thin content lacking substantial information
@@ -180,7 +180,7 @@ export async function analyzeWithAI(
   lang: string = 'en',
   apiKey?: string,
   onProgress?: (message: string) => void,
-  theme?: SiteTheme
+  siteTopic?: SiteTopic
 ): Promise<FullAiAnalysis> {
   const key = apiKey || getApiKey();
   const empty: FullAiAnalysis = {
@@ -205,7 +205,7 @@ export async function analyzeWithAI(
       const totalBatches = Math.ceil(pages.length / CONCURRENCY);
       progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
-        batch.map(p => analyzePage(p, langName, date, theme))
+        batch.map(p => analyzePage(p, langName, date, siteTopic))
       );
       pageAnalyses.push(...results);
     }

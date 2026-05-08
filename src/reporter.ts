@@ -49,15 +49,15 @@ export function renderTerminalReport(report: CheckReport): string {
     chalk.gray(`  Site type: ${typeLabel}${confidenceLabel}`),
   ];
 
-  // Theme info
-  if (report.siteTheme) {
-    lines.push(chalk.gray(`  Theme: ${report.siteTheme.topic} — ${report.siteTheme.description}`));
+  // Topic info
+  if (report.siteTopic) {
+    lines.push(chalk.gray(`  Topic: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
   }
 
   // Unsupported warning
   if (report.siteType === 'unsupported') {
     lines.push('');
-    lines.push(chalk.red.bold(`  ${t('theme.unsupported_warning', lang, { type: report.siteTheme?.topic ?? 'unknown' })}`));
+    lines.push(chalk.red.bold(`  ${t('topic.unsupported_warning', lang, { type: report.siteTopic?.topic ?? 'unknown' })}`));
   }
 
   lines.push('');

@@ -1,4 +1,4 @@
-import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTheme } from './types.js';
+import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic } from './types.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
@@ -6,7 +6,7 @@ import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
 import { analyzeWithAI, type PageAiAnalysis } from './ai/analyzer.js';
-import { analyzeSiteTheme } from './ai/theme.js';
+import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
 import { scorePage, scoreCategory, computeCompositeScore } from './scorer.js';
@@ -117,19 +117,19 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     progress('Fetching sitemap...');
     const sitemapUrls = await fetchSitemapUrls(origin);
 
-    // AI theme analysis (runs early, after homepage is fetched)
-    let siteTheme: SiteTheme | undefined;
+    // AI topic analysis (runs early, after homepage is fetched)
+    let siteTopic: SiteTopic | undefined;
     if (!skipAi) {
       try {
         const apiKeyResolved = apiKey || process.env.AI_API_KEY;
         if (apiKeyResolved) {
-          progress('AI: analyzing site theme...');
-          siteTheme = await analyzeSiteTheme(
+          progress('AI: analyzing site topic...');
+          siteTopic = await analyzeSiteTopic(
             { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
             lang,
             apiKeyResolved
           );
-          progress(`AI: site type = ${siteTheme.type}, topic = ${siteTheme.topic}`);
+          progress(`AI: site type = ${siteTopic.type}, topic = ${siteTopic.topic}`);
         }
       } catch {}
     }
@@ -244,20 +244,20 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       if (seen.has(norm)) return false; seen.add(norm); return true;
     });
 
-    // Detect site type: prefer AI theme, fallback to DOM signals
+    // Detect site type: prefer AI topic, fallback to DOM signals
     progress('Detecting site type...');
     const domResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
     let siteType: SiteType;
     let siteTypeConfidence: 'high' | 'medium' | 'low';
 
-    if (siteTheme && siteTheme.type !== 'unsupported') {
+    if (siteTopic && siteTopic.type !== 'unsupported') {
       // AI detected a valid type — use it
-      siteType = siteTheme.type;
-      siteTypeConfidence = siteTheme.confidence;
-    } else if (siteTheme?.type === 'unsupported') {
+      siteType = siteTopic.type;
+      siteTypeConfidence = siteTopic.confidence;
+    } else if (siteTopic?.type === 'unsupported') {
       // AI confirmed unsupported — use it
       siteType = 'unsupported';
-      siteTypeConfidence = siteTheme.confidence;
+      siteTypeConfidence = siteTopic.confidence;
     } else {
       // Fallback to DOM detection
       siteType = domResult.type;
@@ -306,7 +306,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     if (!skipAi) {
       try {
         progress(`AI analysis: ${uniquePages.length} pages...`);
-        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTheme);
+        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic);
         pageAnalyses = aiResult.pageAnalyses;
         const aiItems: CheckItem[] = [
           { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },
@@ -334,10 +334,10 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         const relevanceStatus = offTopicRatio > 0.3 ? 'fail' : offTopicRatio > 0.1 ? 'warn' : 'pass';
         const msg = offTopic > 0 || tangential > 0
           ? `${offTopic} off-topic, ${tangential} tangential out of ${withRelevance.length} pages`
-          : `All ${withRelevance.length} pages relevant to site theme`;
+          : `All ${withRelevance.length} pages relevant to site topic`;
         allCategories.push({
           name: t('group.content_relevance', lang),
-          items: [{ name: t('item.relevance.theme', lang), status: relevanceStatus, message: msg }],
+          items: [{ name: t('item.relevance.topic', lang), status: relevanceStatus, message: msg }],
           group: 'soft',
         });
       }
@@ -355,7 +355,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence,
-      siteTheme,
+      siteTopic,
       categories: allCategories,
       hardCategories,
       softCategories,

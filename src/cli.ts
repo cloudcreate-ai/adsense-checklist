@@ -8,6 +8,9 @@ import { join } from 'node:path';
 import { check } from './checker.js';
 import { renderTerminalReport, renderJsonReport } from './reporter.js';
 import { t, isValidLang, getSupportedLangs } from './i18n.js';
+import { BrowserManager, fetchPage } from './browser.js';
+import { detectSiteType } from './detector.js';
+import { analyzeSiteTopic } from './ai/topic.js';
 import type { Lang, SiteType } from './types.js';
 
 function formatTimestamp(): string {
@@ -39,6 +42,7 @@ program
   .option('--no-save', 'Skip auto-saving report')
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
   .option('--type <type>', 'Force site type (content|tool|game), skip auto-detection')
+  .option('--detect-only', 'Only detect site type/topic, skip full check')
   .action(async (url: string, opts) => {
     try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
     if (!url.startsWith('http')) url = 'https://' + url;
@@ -46,6 +50,52 @@ program
     const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
     const validTypes: SiteType[] = ['content', 'tool', 'game'];
     const siteType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : undefined;
+
+    // Detect-only mode: just fetch homepage and determine type
+    if (opts.detectOnly) {
+      const browser = new BrowserManager();
+      try {
+        process.stderr.write(chalk.cyan(`● Detecting site type for ${url}...\n`));
+        const page = await browser.newPage();
+        const data = await fetchPage(page, url, parseInt(opts.timeout, 10));
+        await page.close();
+
+        // DOM-based detection
+        const domResult = detectSiteType([data.signals], data.navText + ' ' + data.footerText, siteType);
+        process.stderr.write(chalk.gray(`  DOM detection: ${domResult.type} (${domResult.confidence})\n`));
+
+        // AI-based detection (if enabled)
+        const apiKey = opts.apiKey || process.env.AI_API_KEY;
+        if (opts.ai && apiKey) {
+          process.stderr.write(chalk.gray('  AI: analyzing topic...\n'));
+          const topic = await analyzeSiteTopic(
+            { title: data.title, text: data.text, navText: data.navText + ' ' + data.footerText },
+            lang, apiKey
+          );
+          console.log(JSON.stringify({
+            domType: domResult.type,
+            domConfidence: domResult.confidence,
+            aiType: topic.type,
+            topic: topic.topic,
+            description: topic.description,
+            confidence: topic.confidence,
+            reasoning: topic.reasoning,
+          }, null, 2));
+        } else {
+          console.log(JSON.stringify({
+            type: domResult.type,
+            confidence: domResult.confidence,
+            signals: domResult.signals,
+          }, null, 2));
+        }
+        await browser.close();
+        process.exit(0);
+      } catch (err) {
+        await browser.close();
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(2);
+      }
+    }
 
     process.stderr.write(chalk.cyan(`● Checking ${url}...\n`));
 

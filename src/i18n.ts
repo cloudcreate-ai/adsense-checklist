@@ -158,13 +158,13 @@ const en: Record<string, string> = {
   'group.user_experience': 'User Experience',
   'group.content_relevance': 'Content Relevance',
 
-  // Theme & relevance
-  'item.relevance.theme': 'Theme Relevance',
+  // Topic & relevance
+  'item.relevance.topic': 'Topic Relevance',
   'detector.type.tool': 'Tool Site',
   'detector.type.unsupported': 'Unsupported Type',
-  'theme.info': 'Site theme: {topic}',
-  'theme.description': '{description}',
-  'theme.unsupported_warning': 'This site type ({type}) is not supported by AdSense checklist',
+  'topic.info': 'Site topic: {topic}',
+  'topic.description': '{description}',
+  'topic.unsupported_warning': 'This site type ({type}) is not supported by AdSense checklist',
 };
 
 // ─── 中文消息 ───────────────────────────────────────────────────────
@@ -326,12 +326,12 @@ const zh: Record<string, string> = {
   'group.content_relevance': '内容相关性',
 
   // 主题和相关性
-  'item.relevance.theme': '主题相关性',
+  'item.relevance.topic': '主题相关性',
   'detector.type.tool': '工具站',
   'detector.type.unsupported': '不支持的类型',
-  'theme.info': '站点主题: {topic}',
-  'theme.description': '{description}',
-  'theme.unsupported_warning': '该站点类型（{type}）不在 AdSense 检查支持范围内',
+  'topic.info': '站点主题: {topic}',
+  'topic.description': '{description}',
+  'topic.unsupported_warning': '该站点类型（{type}）不在 AdSense 检查支持范围内',
 };
 
 // ─── Language registry ──────────────────────────────────────────────

@@ -36,7 +36,7 @@ export interface PageDetail {
   };
 }
 
-export interface SiteTheme {
+export interface SiteTopic {
   type: SiteType;
   topic: string;
   description: string;
@@ -56,7 +56,7 @@ export interface CheckReport {
   lang: Lang;
   siteType: SiteType;
   siteTypeConfidence: 'high' | 'medium' | 'low';
-  siteTheme?: SiteTheme;
+  siteTopic?: SiteTopic;
   categories: CheckCategory[];
   hardCategories: CheckCategory[];
   softCategories: CheckCategory[];

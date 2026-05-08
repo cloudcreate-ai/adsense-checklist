@@ -1,4 +1,4 @@
-import type { SiteTheme, SiteType } from '../types.js';
+import type { SiteTopic, SiteType } from '../types.js';
 
 function getApiEndpoint(): string {
   const base = process.env.AI_API_BASE || 'https://api.deepseek.com';
@@ -41,15 +41,15 @@ function extractJson(text: string): any {
 
 const VALID_TYPES: SiteType[] = ['content', 'tool', 'game'];
 
-export async function analyzeSiteTheme(
+export async function analyzeSiteTopic(
   homepage: { title: string; text: string; navText: string },
   lang: string = 'en',
   apiKey: string
-): Promise<SiteTheme> {
+): Promise<SiteTopic> {
   const langName = lang === 'zh' ? '中文' : 'English';
   const content = homepage.text.slice(0, 2000);
 
-  const prompt = `You are a web analyst. Determine the type and theme of this website.
+  const prompt = `You are a web analyst. Determine the type and topic of this website.
 
 Homepage title: ${homepage.title}
 Navigation: ${homepage.navText.slice(0, 500)}
@@ -67,7 +67,7 @@ Reply language: ${langName}
 Reply in ${langName} with JSON:
 {
   "type": "content|tool|game|unsupported",
-  "topic": "Main topic/theme in 3-5 words (e.g. 'Excel translation reference')",
+  "topic": "Main topic in 3-5 words (e.g. 'Excel translation reference')",
   "description": "One sentence describing what this site does",
   "confidence": "high|medium|low",
   "reasoning": "Brief explanation of why this type was chosen"
@@ -88,7 +88,7 @@ Reply in ${langName} with JSON:
     return {
       type: 'unsupported',
       topic: 'Unknown',
-      description: 'Theme analysis failed',
+      description: 'Topic analysis failed',
       confidence: 'low',
       reasoning: 'AI analysis failed',
     };
