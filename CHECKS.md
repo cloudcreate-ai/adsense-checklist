@@ -1,8 +1,87 @@
 # AdSense Checklist — 检查项说明
 
-## 1. Content Quality（内容质量）— 抗 Low Value Content
+## 评分体系
 
-核心模块，专门检测 AdSense 最常见的拒绝理由 "low value content"。
+采用**两组评分**：硬性要求（Hard）+ 柔性评分（Soft）。
+
+```
+综合评分 = 硬性通过率 × 0.4 + 柔性得分 × 0.6 - 警告扣分
+```
+
+- **硬性要求**：必须全部通过，任一 FAIL 则整体 NOT READY
+- **柔性评分**：0-100 分，加权计算
+- **警告扣分**：警告比例 >15% 时按比例扣分
+
+### 柔性评分权重
+
+| 组成 | 权重 | 说明 |
+|------|------|------|
+| 页面质量 | 25% | 各页面的逐页评分（含 AI 调整） |
+| AI 分析 | 35% | AI 内容价值、原创性、合规性 |
+| 内容质量 | 20% | 机械检测（重复率、深度等） |
+| 用户体验 | 20% | 字体、弹窗等 |
+
+---
+
+## 硬性要求（Hard Requirements）
+
+任一 FAIL → `NOT READY`
+
+### 1. 站点规模
+
+| 检查项 | 说明 | 通过条件 |
+|--------|------|----------|
+| 站点规模 | sitemap + 链接发现的总页面数 | ≥ 10 个页面 |
+
+### 2. 必要页面
+
+| 检查项 | 必需 | 匹配方式 |
+|--------|------|----------|
+| About 页面 | ✅ | URL 路径 `/about` + 链接文字 + sitemap |
+| Privacy Policy 页面 | ✅ | URL 路径 `/privacy` + 链接文字 + sitemap |
+| Contact 页面 | ✅ | URL 路径 `/contact` + 链接文字 + sitemap |
+| Terms of Service 页面 | ⚠️ 建议 | URL 路径 `/terms` + 链接文字 + sitemap |
+
+检测覆盖范围：首页所有链接的 href + 可见文字 + `<nav>` + `<footer>` + sitemap.xml URL。
+
+### 3. 网站结构
+
+| 检查项 | 说明 | 通过条件 |
+|--------|------|----------|
+| H1 标签 | 页面 H1 标签数量 | 有且仅有 1 个 |
+| robots.txt | robots.txt 文件是否存在 | 文件存在且可访问 |
+| sitemap.xml | sitemap 文件是否存在 | 文件存在且可访问 |
+| 内部链接 | 首页内部链接数量 | ≥ 5 个 |
+| 死链检测 | 爬取内链检查 HTTP 状态码 | 无 404/5xx 响应 |
+
+### 4. 性能底线
+
+| 检查项 | 说明 | 通过条件 |
+|--------|------|----------|
+| 页面加载速度 | 从请求到 DOMContentLoaded 的时间 | < 3s 通过，3-6s 警告，> 6s 失败 |
+| viewport 标签 | 是否存在 `<meta name="viewport">` | 标签存在 |
+| 移动端横向溢出 | 以 iPhone 视口（390px）访问，检测横向滚动 | body 宽度 ≤ 视口宽度 |
+
+移动端测试使用 Playwright 模拟 iPhone 14 Pro 视口和 User-Agent。
+
+### 5. 政策合规
+
+| 检查项 | 说明 | 通过条件 |
+|--------|------|----------|
+| 违规关键词 | 扫描页面是否包含违规关键词 | 无匹配 |
+
+违规关键词黑名单（中英文）：
+- 色情类：porn, xxx, nude, sex tube, 色情
+- 赌博类：gamble, casino, betting, lottery, 赌博
+- 盗版类：hack, crack, pirate, torrent, warez, 盗版
+- 毒品类：drug, marijuana, cocaine, heroin, 毒品
+- 暴力类：暴力
+
+---
+
+## 柔性评分（Soft Scoring）
+
+### 6. 内容质量
 
 | 检查项 | 说明 | 通过条件 |
 |--------|------|----------|
@@ -13,7 +92,6 @@
 | 凑字数检测 | 重复短语、无意义填充文字（总之、众所周知、click here 等） | 每页平均 ≤ 3 处 |
 | 跨页内容重复 | 段落级去重，200 字粒度检测内容搬运 | 重复率 < 30% |
 | 内容新鲜度 | 页面中日期信息的时效性 | 最近 6 个月内有更新 |
-| 站点规模 | sitemap 中的总页面数 | ≥ 10 个页面 |
 
 ### 正文提取算法
 
@@ -27,61 +105,16 @@
 2. 比较页面间的"骨架"结构相似度
 3. 相似度 > 60% 视为模板批量生成
 
-## 2. Required Pages（必要页面）
-
-| 检查项 | 必需 | 匹配方式 |
-|--------|------|----------|
-| About 页面 | ✅ | URL 路径 `/about` + 链接文字 + sitemap |
-| Privacy Policy 页面 | ✅ | URL 路径 `/privacy` + 链接文字 + sitemap |
-| Contact 页面 | ✅ | URL 路径 `/contact` + 链接文字 + sitemap |
-| Terms of Service 页面 | ⚠️ 建议 | URL 路径 `/terms` + 链接文字 + sitemap |
-
-检测覆盖范围：首页所有链接的 href + 可见文字 + `<nav>` + `<footer>` + sitemap.xml URL。
-找到时报告具体路径，如 `/privacy/`。
-
-## 3. Site Structure（网站结构）
+### 7. 用户体验
 
 | 检查项 | 说明 | 通过条件 |
 |--------|------|----------|
-| H1 标签 | 页面 H1 标签数量 | 有且仅有 1 个 |
-| robots.txt | robots.txt 文件是否存在 | 文件存在且可访问 |
-| sitemap.xml | sitemap 文件是否存在 | 文件存在且可访问 |
-| 内部链接 | 首页内部链接数量 | ≥ 5 个 |
-| 死链检测 | 爬取内链检查 HTTP 状态码 | 无 404/5xx 响应 |
-
-死链检测采样前 N 个内部链接（`--depth` 参数控制，默认 10）。
-
-## 4. Performance（性能与体验）
-
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 页面加载速度 | 从请求到 DOMContentLoaded 的时间 | < 3s 通过，3-6s 警告，> 6s 失败 |
-| viewport 标签 | 是否存在 `<meta name="viewport">` | 标签存在 |
-| 移动端横向溢出 | 以 iPhone 视口（390px）访问，检测横向滚动 | body 宽度 ≤ 视口宽度 |
 | 移动端字体大小 | 检测所有文字元素字号 | 所有文字 ≥ 12px |
 | 弹窗检测 | 检测可见的 modal/popup/overlay 元素 | 无可见弹窗 |
 
-移动端测试使用 Playwright 模拟 iPhone 14 Pro 视口和 User-Agent。
+### 8. AI 内容分析
 
-## 5. Policy Compliance（政策合规）
-
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 违规关键词 | 扫描页面是否包含违规关键词 | 无匹配 |
-
-违规关键词黑名单（中英文）：
-- 色情类：porn, xxx, nude, sex tube, 色情
-- 赌博类：gamble, casino, betting, lottery, 赌博
-- 盗版类：hack, crack, pirate, torrent, warez, 盗版
-- 毒品类：drug, marijuana, cocaine, heroin, 毒品
-- 暴力类：暴力
-
-## 6. AI Content Analysis（AI 内容分析）
-
-需要在 `.env` 文件中配置 AI 相关环境变量，或使用 `--api-key` 参数。
-支持任何兼容 OpenAI API 格式的服务（DeepSeek、OpenAI、月之暗面、本地 LLM 等）。
-
-### 整体评估
+需要 `--ai` 标志 + AI API 配置。支持任何兼容 OpenAI API 格式的服务。
 
 | 检查项 | 说明 |
 |--------|------|
@@ -97,15 +130,65 @@ AI 同时对每个页面给出独立评估，包含在 JSON 报告的 `pages[].a
 - `assessment`: 该页面的具体评估
 - `suggestions`: 针对该页面的改进建议
 
-使用 `--skip-ai` 可跳过 AI 分析。
+### 9. 内容相关性
 
-## 评分规则
+基于 AI 逐页分析的主题相关性评估：
 
-- **Score** = PASS 项目数
-- **Status 判定**：
-  - 有 FAIL → `NOT READY`
-  - 无 FAIL 但有 WARN → `MOSTLY READY`
-  - 全部 PASS → `READY`
+| 相关度 | 说明 |
+|--------|------|
+| relevant | 直接相关 |
+| tangential | 部分相关 |
+| off-topic | 不相关 |
+
+**评分规则**：
+- off-topic 页面 >30% → FAIL
+- off-topic 页面 >10% → WARN
+- 其他 → PASS
+
+---
+
+## 站点类型检测
+
+### AI 主题分析（`--ai`）
+
+调用 AI 分析首页标题、导航、正文，判断：
+- 站点类型：content / tool / game / unsupported
+- 主题关键词
+- 一句话描述
+
+### DOM 信号检测（fallback）
+
+当 AI 不可用时，基于 DOM 信号判断：
+- **Game**: iframe 游戏嵌入、canvas 标签、游戏相关链接
+- **Tool**: 导航中含 calculator/converter/generator/tool 等关键词
+- **Content**: 默认类型
+
+### 类型对检查的影响
+
+| 类型 | 内容深度标准 | 特殊处理 |
+|------|------------|----------|
+| Content | ≥ 300 字/页 | 正文占比重点检查 |
+| Tool | ≥ 300 字/页 | 同 content 标准 |
+| Game | ≥ 100 字/页（游戏描述） | 宽松的内容深度要求 |
+| Unsupported | — | 跳过检查，直接警告 |
+
+## 抽样策略
+
+1. 收集所有已知 URL（首页链接 + sitemap + Phase 1 发现的链接）
+2. 过滤技术文件（.xml, .txt, .json, .css, .js, 图片等）
+3. 支持递归 sitemap 索引（`<sitemap>` 标签，最大深度 3）
+4. Phase 1：爬取结构页面（首页、必要页、列表页），上限 `--page-limit`
+5. Phase 2：按 freshness 排序内容页面，优先取 6 个月内的新内容
+6. 抽样数量：max(总内容 × sampleRatio, sampleMin)，不超过 `--content-limit`
+7. 统一爬取上限：Phase 1 + Phase 2 不超过 `--max-crawl`
+
+## 抽样置信度
+
+| 置信度 | 条件 |
+|--------|------|
+| high | 抽样 ≥ 50% 的已发现内容页 |
+| medium | 抽样 ≥ 20% |
+| low | 抽样 < 20% |
 
 ## 退出码
 

@@ -1,6 +1,6 @@
 # @cloudcreate/adsense-check
 
-Automated website checker for Google AdSense review requirements. Focuses on detecting "low value content" — the #1 rejection reason.
+Automated website checker for Google AdSense review requirements. Detects "low value content" — the #1 rejection reason. Supports content sites, tool sites, and game sites with AI-powered topic analysis and content relevance checking.
 
 ## Install
 
@@ -18,75 +18,92 @@ npx @cloudcreate/adsense-check https://example.com
 
 ```bash
 # Full check with AI analysis
-adsense-check https://example.com
+adsense-check https://example.com --ai
 
 # Quick check without AI
-adsense-check https://example.com --skip-ai
+adsense-check https://example.com
 
 # JSON output (for programmatic use)
 adsense-check https://example.com --json
+
+# Chinese output
+adsense-check https://example.com -l zh --ai
+
+# Only detect site type and topic
+adsense-check https://example.com --detect-only --ai
 ```
 
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json`.
 
-## What It Checks
+## Features
 
-| Category | Checks | Focus |
-|----------|--------|-------|
-| **Content Quality** (8) | Content ratio, depth, template detection, filler detection, duplication, freshness, site scale | Low-value content |
-| **Required Pages** (4) | About, Privacy Policy, Contact, Terms of Service | Completeness |
-| **Site Structure** (5) | H1 tags, robots.txt, sitemap, internal links, dead links | Crawlability |
-| **Performance** (5) | Load speed, viewport, mobile overflow, font size, popups | User experience |
-| **Policy Compliance** (1) | Blacklisted keywords | AdSense policy |
-| **AI Analysis** (3+) | Content value, originality, compliance + per-page analysis | Low-value content |
+### Site Type Detection
 
-### Content Quality (Anti Low-Value Content)
+Automatically classifies websites into three supported types:
 
-The core focus of this tool — detecting content that AdSense reviewers flag as "low value":
+| Type | Description | Examples |
+|------|-------------|----------|
+| **Content** | News, blogs, reference material | theexceltranslator.com |
+| **Tool** | Online calculators, converters, generators | ishowspeedsaid.com |
+| **Game** | Online games, game portals | popstone2.com |
+| **Unsupported** | Other types (e-commerce, social, etc.) | — |
 
-- **Content Ratio**: Strips navigation/footer/sidebar, measures real content percentage
-- **Content Depth**: Per-page word count of actual content (not total page text)
-- **Template Detection**: Flags pages with identical structures but different words
-- **Filler Detection**: Catches repeated phrases, padding, meaningless text
-- **Cross-Page Duplication**: Segment-level dedup across all crawled pages
-- **Content Freshness**: Checks if site has been updated recently
-- **Site Scale**: Warns if site has too few content pages
+AI analysis classifies the site type and topic. Falls back to DOM signal detection when AI is unavailable.
 
-### AI Per-Page Analysis
+### AI Topic Analysis
 
-With AI enabled, each crawled page gets individual assessment:
+With `--ai`, the tool analyzes the homepage to determine:
+- **Topic**: What the site is about (e.g., "online match-3 puzzle games")
+- **Description**: One-line summary of the site's purpose
+- **Type**: content / tool / game / unsupported
 
-```json
-{
-  "pages": [
-    {
-      "url": "https://example.com/blog/post-1",
-      "title": "Post Title",
-      "contentChars": 1200,
-      "contentRatio": 85,
-      "contentStatus": "pass",
-      "issues": [],
-      "ai": {
-        "status": "pass",
-        "assessment": "Content provides genuine value...",
-        "suggestions": ["Add more specific examples"]
-      }
-    }
-  ]
-}
+### Content Relevance Checking
+
+Each page is evaluated for relevance to the site's topic:
+- **relevant**: Directly related to the site's topic
+- **tangential**: Loosely related
+- **off-topic**: Unrelated to the site's purpose
+
+Sites with >30% off-topic content are flagged as potentially failing review.
+
+### Sampling Strategy
+
+The tool discovers content pages from sitemaps (including recursive sitemap indexes) and homepage links, then samples based on:
+
+- **6-month freshness**: Prioritizes recently updated content
+- **Configurable minimum**: `--sample-min` (default: 20)
+- **Configurable ratio**: `--sample-ratio` (default: 0.2, i.e., 20%)
+- **Confidence level**: high (≥50%), medium (≥20%), low (<20%)
+
+### Two-Group Scoring
+
+Checks are divided into **Hard Requirements** (pass/fail) and **Soft Scoring** (0-100):
+
 ```
+Composite = Hard Pass Rate × 0.4 + Soft Score × 0.6 - Warning Penalty
+```
+
+- **Hard**: Site scale, required pages, structure, performance baseline, policy compliance
+- **Soft**: Content quality, user experience, AI analysis, content relevance
 
 ## Options
 
 ```
--v, --version         Show version
--j, --json            Output JSON to stdout
--d, --depth <n>       Pages to crawl (default: 10)
--s, --skip-ai         Skip AI analysis
--t, --timeout <ms>    Page load timeout (default: 30000)
---api-key <key>       AI API key
--o, --output <dir>    Report output dir (default: tmp)
---no-save             Skip auto-saving report
+-v, --version             Show version
+-j, --json                Output JSON to stdout
+-n, --max-crawl <n>       Total page crawl limit, Phase 1 + 2 (default: 50)
+-m, --page-limit <n>      Max structural pages to crawl, Phase 1 (default: 50)
+-c, --content-limit <n>   Max content pages to crawl, Phase 2 (default: 20)
+--sample-min <n>          Min content pages to sample (default: 20)
+--sample-ratio <ratio>    Content page sampling ratio 0-1 (default: 0.2)
+--ai                      Enable AI content quality analysis
+-t, --timeout <ms>        Page load timeout (default: 30000)
+--api-key <key>           AI API key
+-o, --output <dir>        Report output dir (default: tmp)
+--no-save                 Skip auto-saving report
+-l, --lang <lang>         Output language: en|zh (default: en)
+--type <type>             Force site type: content|tool|game
+--detect-only             Only detect site type/topic, skip full check
 ```
 
 ## AI Configuration
@@ -104,7 +121,7 @@ cp .env.example .env
 Or pass directly:
 
 ```bash
-adsense-check https://example.com --api-key sk-xxx...
+adsense-check https://example.com --ai --api-key sk-xxx...
 ```
 
 ## Report Output
@@ -113,30 +130,33 @@ adsense-check https://example.com --api-key sk-xxx...
 
 ```
   AdSense Checklist Report
-  Website: https://example.com
+  URL: https://example.com
+  Time: 2026-05-08T15:00:00.000Z
+  Site type: 内容站
+  Topic: Excel translation reference — Provides Excel terminology translations for multiple languages.
+  Pages: 165 total, 82 recent (6mo), 33 sampled (20%) medium confidence
 
-  Content Quality
-    ✔ [PASS] 各页面正文占比正常
-    ✔ [PASS] 首页正文内容充足 (2,340 字)
+  综合评分: 82/100
 
-  ...
+  ┌─ 硬性要求 ──────────────────────────────────── PASS
+  │  ✔ 站点规模             站点规模良好 (194 个页面)
+  │  ✔ About            找到 About 页面 (/about/)
+  │  ...
+  └─ 评分: READY — 所有必要项达标
 
-  Page Details (5 pages analyzed)
-    ✔ /
-       正文 92% (2,340/2,540 字)
-    ⚠ /blog/old-post
-       正文 25% (80/320 字)
-       ! 正文占比仅 25%，大量模板元素
-       ✘ AI: 内容过于单薄，缺乏实质性信息
-         → 增加至少 500 字的原创分析内容
-
-  Score: 18/21
-  Status: NOT READY — 1 项失败需要修复
+  ┌─ 柔性评分 ──────────────────────────────────── 75/100
+  │  ████████████████████ 100%  内容质量
+  │  ████████████████████ 100%  用户体验
+  │  ████████░░░░░░░░░░░░  40%  AI 内容分析
+  │  ████████████████████ 100%  内容相关性
+  │
+  │  Hard 40% × 0.4 + Soft 75% × 0.6 - Penalty 0 = 82
+  └─
 ```
 
 ### JSON Report
 
-Full structured data including per-page details, saved automatically to `tmp/`.
+Full structured data including per-page details, AI assessments, topic info, and sampling stats. Saved automatically to `tmp/`.
 
 ## Exit Codes
 
