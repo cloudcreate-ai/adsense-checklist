@@ -31,6 +31,7 @@ program
   .version('1.0.0')
   .argument('<url>', 'Website URL to check')
   .option('-j, --json', 'Output JSON to stdout')
+  .option('-n, --max-crawl <number>', 'Total page crawl limit (Phase 1 + 2)', '50')
   .option('-m, --page-limit <number>', 'Max structural pages to crawl (Phase 1)', '50')
   .option('-c, --content-limit <number>', 'Max content pages to crawl (Phase 2)', '20')
   .option('--sample-min <number>', 'Min content pages to sample', '20')
@@ -103,6 +104,7 @@ program
       let lastProgress = '';
       const report = await check({
         url,
+        maxCrawl: parseInt(opts.maxCrawl, 10),
         maxPages: parseInt(opts.pageLimit, 10),
         maxContent: parseInt(opts.contentLimit, 10),
         sampleMin: parseInt(opts.sampleMin, 10),

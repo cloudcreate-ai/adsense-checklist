@@ -57,6 +57,13 @@ export interface CheckReport {
   siteType: SiteType;
   siteTypeConfidence: 'high' | 'medium' | 'low';
   siteTopic?: SiteTopic;
+  samplingInfo?: {
+    totalDiscovered: number;
+    recentCount: number;
+    sampledCount: number;
+    samplePct: number;
+    confidence: 'high' | 'medium' | 'low';
+  };
   categories: CheckCategory[];
   hardCategories: CheckCategory[];
   softCategories: CheckCategory[];
@@ -77,6 +84,7 @@ export interface CheckReport {
 
 export interface CheckOptions {
   url: string;
+  maxCrawl?: number;
   maxPages?: number;
   maxContent?: number;
   sampleMin?: number;

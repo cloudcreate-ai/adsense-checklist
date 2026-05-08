@@ -104,7 +104,10 @@ function sortByFreshness(urls: string[]): string[] {
 }
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+  const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+
+  // Cap phase limits by total crawl budget
+  const phase1Limit = Math.min(maxPages, maxCrawl);
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
   const progress = onProgress ?? (() => {});
@@ -143,7 +146,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const internalLinks = homeData.links.filter(l => { try { return new URL(l).origin === origin && isContentUrl(l); } catch { return false; } });
     const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin && isContentUrl(u); } catch { return false; } });
     const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
-    const uniqueLinks = allInternal.slice(0, maxPages);
+    const uniqueLinks = allInternal.slice(0, phase1Limit);
 
     const deadLinks: string[] = [];
     const crawledUrls = new Set([url.replace(/\/+$/, '')]);
@@ -213,9 +216,11 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       }
     }
 
-    // Sort by freshness (newest first) then take maxContent
+    // Sort by freshness (newest first) then take maxContent, capped by remaining crawl budget
+    const remainingBudget = Math.max(0, maxCrawl - crawledUrls.size);
+    const phase2Limit = Math.min(maxContent, remainingBudget);
     const sortedContent = sortByFreshness([...discoveredContent]);
-    const toCrawl = sortedContent.slice(0, maxContent);
+    const toCrawl = sortedContent.slice(0, phase2Limit);
     if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} content pages (from ${discoveredContent.size} discovered)...`);
     for (let i = 0; i < toCrawl.length; i++) {
       const link = toCrawl[i];
@@ -244,6 +249,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       const norm = p.url.replace(/\/+$/, '').split('#')[0];
       if (seen.has(norm)) return false; seen.add(norm); return true;
     });
+
+    // Sampling stats
+    const totalDiscovered = discoveredContent.size;
+    const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000;
+    const recentCount = [...discoveredContent].filter(u => freshnessScore(u) >= sixMonthsAgo).length;
+    const sampledCount = toCrawl.length;
+    const samplePct = totalDiscovered > 0 ? Math.round((sampledCount / totalDiscovered) * 100) : 0;
+    const confidence = samplePct >= 50 ? 'high' : samplePct >= 20 ? 'medium' : 'low';
+    progress(`Pages: ${totalDiscovered} discovered, ${recentCount} recent (6mo), ${sampledCount} sampled (${samplePct}%, confidence: ${confidence})`);
 
     // Detect site type: prefer AI topic, fallback to DOM signals
     progress('Detecting site type...');
@@ -357,6 +371,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence,
       siteTopic,
+      samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
       categories: allCategories,
       hardCategories,
       softCategories,

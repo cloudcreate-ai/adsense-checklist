@@ -54,6 +54,13 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push(chalk.gray(`  Topic: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
   }
 
+  // Sampling info
+  if (report.samplingInfo) {
+    const s = report.samplingInfo;
+    const confColor = s.confidence === 'high' ? chalk.green : s.confidence === 'medium' ? chalk.yellow : chalk.red;
+    lines.push(chalk.gray(`  Pages: ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%) ${confColor(s.confidence + ' confidence')}`));
+  }
+
   // Unsupported warning
   if (report.siteType === 'unsupported') {
     lines.push('');
