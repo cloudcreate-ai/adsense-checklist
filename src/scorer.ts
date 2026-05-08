@@ -86,9 +86,9 @@ export function scoreCategory(category: CheckCategory): CategoryScore {
 // Soft scoring weights (must sum to 1.0)
 const SOFT_WEIGHTS = {
   pageQuality: 0.25,    // per-page scores (AI-adjusted)
-  aiAnalysis: 0.45,     // AI content analysis
+  aiAnalysis: 0.35,     // AI content analysis
   contentQuality: 0.20, // mechanical content checks
-  userExperience: 0.10, // font, popup checks
+  userExperience: 0.20, // font, popup checks
 };
 
 // Composite: hard * 0.4 + soft * 0.6
@@ -173,7 +173,7 @@ export function computeCompositeScore(
   const totalWarn = allItems.filter(i => i.status === 'warn').length;
   const totalAll = allItems.length;
   const warningRatio = totalAll > 0 ? totalWarn / totalAll : 0;
-  const warningPenalty = warningRatio > 0.05 ? Math.round((warningRatio - 0.05) * 200) : 0;
+  const warningPenalty = warningRatio > 0.15 ? Math.round((warningRatio - 0.15) * 100) : 0;
 
   // 4. Composite
   const base = hardPassRate * HARD_COMPOSITE_WEIGHT + softScore * SOFT_COMPOSITE_WEIGHT;
