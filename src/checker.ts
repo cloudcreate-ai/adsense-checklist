@@ -8,7 +8,7 @@ import { checkPolicyCompliance } from './checks/policy.js';
 import { analyzeWithAI } from './ai/analyzer.js';
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, depth = 5, skipAi = false, timeout = 30000, apiKey } = options;
+  const { url, depth = 10, skipAi = false, timeout = 30000, apiKey } = options;
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
 
@@ -36,7 +36,12 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         return false;
       }
     });
-    const uniqueLinks = [...new Set(internalLinks)].slice(0, depth);
+    // Merge links from page + sitemap for better coverage
+    const sitemapInternal = sitemapUrls.filter(u => {
+      try { return new URL(u).origin === origin; } catch { return false; }
+    });
+    const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
+    const uniqueLinks = allInternal.slice(0, depth);
 
     // Track dead links
     const deadLinks: string[] = [];
@@ -62,7 +67,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // Run all checks
     const categories: CheckCategory[] = [];
 
-    categories.push(checkContentQuality(pages));
+    categories.push(checkContentQuality(pages, allInternal.length));
     categories.push(await checkRequiredPages({
       allLinks: homeData.linkDetails,
       navText: homeData.navText,
