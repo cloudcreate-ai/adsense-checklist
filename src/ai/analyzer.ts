@@ -169,7 +169,8 @@ Based on these results, provide an overall assessment in ${langName} with JSON:
 export async function analyzeWithAI(
   pages: Array<{ url: string; text: string }>,
   lang: string = 'en',
-  apiKey?: string
+  apiKey?: string,
+  onProgress?: (message: string) => void
 ): Promise<FullAiAnalysis> {
   const key = apiKey || getApiKey();
   const empty: FullAiAnalysis = {
@@ -187,8 +188,12 @@ export async function analyzeWithAI(
   try {
     // Phase 1: Analyze each page individually (concurrency-limited)
     const pageAnalyses: PageAiAnalysis[] = [];
+    const progress = onProgress ?? (() => {});
     for (let i = 0; i < pages.length; i += CONCURRENCY) {
       const batch = pages.slice(i, i + CONCURRENCY);
+      const batchNum = Math.floor(i / CONCURRENCY) + 1;
+      const totalBatches = Math.ceil(pages.length / CONCURRENCY);
+      progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
         batch.map(p => analyzePage(p, langName, date))
       );
@@ -196,6 +201,7 @@ export async function analyzeWithAI(
     }
 
     // Phase 2: Overall assessment based on per-page results
+    progress('AI: generating overall assessment...');
     const overall = await analyzeOverall(pageAnalyses, langName, date);
 
     return {

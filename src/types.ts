@@ -73,4 +73,5 @@ export interface CheckOptions {
   timeout?: number;
   apiKey?: string;
   lang?: Lang;
+  onProgress?: (message: string) => void;
 }

@@ -77,14 +77,18 @@ function discoverChildLinks(
 }
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxPages = 10, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType } = options;
+  const { url, maxPages = 10, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
+  const progress = onProgress ?? (() => {});
 
   try {
+    progress('Launching browser...');
     const homepage = await browser.newPage();
+    progress(`Fetching ${url}...`);
     const homeData = await fetchPage(homepage, url, timeout);
     const h1Count = await homepage.evaluate(() => document.querySelectorAll('h1').length);
+    progress('Fetching sitemap...');
     const sitemapUrls = await fetchSitemapUrls(origin);
 
     const pages: Array<{ url: string; text: string; title: string; links: string[] }> = [
@@ -119,7 +123,10 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     }
 
     // Phase 1: Crawl initial batch
-    for (const link of uniqueLinks) {
+    progress(`Phase 1: Crawling ${uniqueLinks.length} pages...`);
+    for (let i = 0; i < uniqueLinks.length; i++) {
+      const link = uniqueLinks[i];
+      progress(`Phase 1: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}`);
       await crawlPage(link);
     }
 
@@ -152,7 +159,10 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // Crawl content pages first, then listing pages (up to maxPages additional)
     const prioritized = [...discoveredContent, ...discoveredListing];
     const toCrawl = prioritized.slice(0, maxPages);
-    for (const link of toCrawl) {
+    if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} discovered pages...`);
+    for (let i = 0; i < toCrawl.length; i++) {
+      const link = toCrawl[i];
+      progress(`Phase 2: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}`);
       await crawlPage(link);
     }
 
@@ -164,10 +174,12 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     });
 
     // Detect site type
+    progress('Detecting site type...');
     const typeResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
     const siteType = typeResult.type;
 
     // Checks - build categories with group assignments
+    progress('Running checks...');
     const allCategories: CheckCategory[] = [];
 
     // Content quality → soft
@@ -207,7 +219,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     let pageAnalyses: PageAiAnalysis[] = [];
     if (!skipAi) {
       try {
-        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey);
+        progress(`AI analysis: ${uniquePages.length} pages...`);
+        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress);
         pageAnalyses = aiResult.pageAnalyses;
         const aiItems: CheckItem[] = [
           { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },

@@ -43,13 +43,10 @@ program
     const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
     const siteType: SiteType | undefined = opts.type === 'game' || opts.type === 'content' ? opts.type : undefined;
 
-    const spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    let frame = 0;
-    const interval = setInterval(() => {
-      process.stderr.write(`\r${chalk.cyan(spinner[frame++ % spinner.length])} Checking ${url}...`);
-    }, 80);
+    process.stderr.write(chalk.cyan(`● Checking ${url}...\n`));
 
     try {
+      let lastProgress = '';
       const report = await check({
         url,
         maxPages: parseInt(opts.maxPages, 10),
@@ -58,10 +55,14 @@ program
         timeout: parseInt(opts.timeout, 10),
         apiKey: opts.apiKey,
         lang,
+        onProgress: (msg: string) => {
+          lastProgress = msg;
+          const line = `\r${chalk.cyan('●')} ${chalk.gray(msg)}`;
+          process.stderr.write(line + ' '.repeat(Math.max(0, 60 - msg.length)));
+        },
       });
 
-      clearInterval(interval);
-      process.stderr.write('\r' + ' '.repeat(60) + '\r');
+      process.stderr.write('\r' + ' '.repeat(80) + '\r');
 
       if (opts.json) console.log(renderJsonReport(report));
       else console.log(renderTerminalReport(report));
@@ -81,8 +82,7 @@ program
 
       process.exit(report.failed > 0 ? 1 : 0);
     } catch (err) {
-      clearInterval(interval);
-      process.stderr.write('\r' + ' '.repeat(60) + '\r');
+      process.stderr.write('\r' + ' '.repeat(80) + '\r');
       console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
       process.exit(2);
     }
