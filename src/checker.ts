@@ -1,5 +1,5 @@
 import type { CheckReport, CheckOptions, CheckCategory, CheckItem } from './types.js';
-import { BrowserManager, fetchPage } from './browser.js';
+import { BrowserManager, fetchPage, fetchSitemapUrls } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
@@ -19,10 +19,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const h1Count = await homepage.evaluate(
       () => document.querySelectorAll('h1').length
     );
-    const navText = await homepage.evaluate(() => {
-      const nav = document.querySelector('nav');
-      return nav?.innerText ?? '';
-    });
+
+    // Fetch sitemap URLs
+    const sitemapUrls = await fetchSitemapUrls(origin);
 
     // Collect pages for analysis
     const pages: Array<{ url: string; text: string; title: string }> = [
@@ -64,7 +63,12 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const categories: CheckCategory[] = [];
 
     categories.push(checkContentQuality(pages));
-    categories.push(checkRequiredPages(homeData.links, navText));
+    categories.push(await checkRequiredPages({
+      allLinks: homeData.linkDetails,
+      navText: homeData.navText,
+      footerText: homeData.footerText,
+      sitemapUrls,
+    }));
     categories.push(await checkSiteStructure(origin, homeData.links, h1Count, deadLinks));
 
     // Performance check on a fresh page

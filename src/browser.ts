@@ -48,9 +48,25 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
       .map(a => (a as HTMLAnchorElement).href)
       .filter(href => href.startsWith('http'))
   );
+  const linkDetails = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('a[href]'))
+      .filter(a => (a as HTMLAnchorElement).href.startsWith('http'))
+      .map(a => ({
+        href: (a as HTMLAnchorElement).href,
+        text: a.innerText.trim(),
+      }))
+  );
+  const navText = await page.evaluate(() => {
+    const nav = document.querySelector('nav');
+    return nav?.innerText ?? '';
+  });
+  const footerText = await page.evaluate(() => {
+    const footer = document.querySelector('footer');
+    return footer?.innerText ?? '';
+  });
   const title = await page.title();
 
-  return { status, content, text, links, title, url };
+  return { status, content, text, links, linkDetails, navText, footerText, title, url };
 }
 
 export async function extractLinks(page: Page): Promise<string[]> {
@@ -76,5 +92,20 @@ export async function checkSitemap(origin: string): Promise<boolean> {
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+export async function fetchSitemapUrls(origin: string): Promise<string[]> {
+  try {
+    const resp = await fetch(`${origin}/sitemap.xml`);
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    const matches = text.match(/<loc>(.*?)<\/loc>/g);
+    if (!matches) return [];
+    return matches
+      .map(m => m.replace(/<\/?loc>/g, ''))
+      .filter(u => u.startsWith('http'));
+  } catch {
+    return [];
   }
 }
