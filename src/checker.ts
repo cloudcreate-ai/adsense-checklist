@@ -84,24 +84,18 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
           items: [
             {
               name: '内容质量评估',
-              status: 'pass',
-              message: aiResult.contentQuality.slice(0, 200),
+              status: aiResult.contentQuality.status,
+              message: aiResult.contentQuality.detail.slice(0, 200),
             },
             {
               name: '原创性评估',
-              status: aiResult.originality.includes('采集') ||
-                aiResult.originality.includes('拼凑')
-                ? 'warn'
-                : 'pass',
-              message: aiResult.originality.slice(0, 200),
+              status: aiResult.originality.status,
+              message: aiResult.originality.detail.slice(0, 200),
             },
             {
               name: '合规性评估',
-              status: aiResult.compliance.includes('违规') ||
-                aiResult.compliance.includes('违反')
-                ? 'fail'
-                : 'pass',
-              message: aiResult.compliance.slice(0, 200),
+              status: aiResult.compliance.status,
+              message: aiResult.compliance.detail.slice(0, 200),
             },
           ],
         };

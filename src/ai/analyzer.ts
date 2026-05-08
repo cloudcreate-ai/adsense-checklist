@@ -1,7 +1,7 @@
 export interface AiAnalysis {
-  contentQuality: string;
-  originality: string;
-  compliance: string;
+  contentQuality: { status: 'pass' | 'warn' | 'fail'; detail: string };
+  originality: { status: 'pass' | 'warn' | 'fail'; detail: string };
+  compliance: { status: 'pass' | 'warn' | 'fail'; detail: string };
   suggestions: string[];
 }
 
@@ -25,9 +25,9 @@ export async function analyzeWithAI(
   const key = apiKey || getApiKey();
   if (!key) {
     return {
-      contentQuality: '未配置 AI_API_KEY，跳过 AI 分析',
-      originality: 'N/A',
-      compliance: 'N/A',
+      contentQuality: { status: 'skip' as any, detail: '未配置 AI_API_KEY，跳过 AI 分析' },
+      originality: { status: 'skip' as any, detail: 'N/A' },
+      compliance: { status: 'skip' as any, detail: 'N/A' },
       suggestions: [],
     };
   }
@@ -56,11 +56,13 @@ export async function analyzeWithAI(
 2. 原创性：内容是否像是原创的？是否有采集/拼凑痕迹？
 3. 政策合规：是否含有任何违反 AdSense 政策的内容（色情、暴力、仇恨言论、侵权等）？
 
-请用 JSON 格式回复，结构如下：
+请用 JSON 格式回复，每个维度包含 status 和 detail 字段。
+status 取值: "pass"（通过）、"warn"（有问题但可改进）、"fail"（不符合要求）。
+结构如下：
 {
-  "contentQuality": "详细评估...",
-  "originality": "原创性评估...",
-  "compliance": "合规性评估...",
+  "contentQuality": { "status": "pass|warn|fail", "detail": "详细评估..." },
+  "originality": { "status": "pass|warn|fail", "detail": "原创性评估..." },
+  "compliance": { "status": "pass|warn|fail", "detail": "合规性评估..." },
   "suggestions": ["建议1", "建议2"]
 }
 
@@ -89,9 +91,9 @@ ${contentSummary}`,
   }
 
   return {
-    contentQuality: text.slice(0, 500),
-    originality: '解析失败',
-    compliance: '解析失败',
+    contentQuality: { status: 'warn', detail: text.slice(0, 500) },
+    originality: { status: 'warn', detail: '解析失败' },
+    compliance: { status: 'warn', detail: '解析失败' },
     suggestions: [],
   };
 }
