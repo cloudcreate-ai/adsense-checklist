@@ -122,6 +122,7 @@ const en: Record<string, string> = {
   'ai.skip': 'AI_API_KEY not configured, skipping AI analysis',
   'ai.fail': 'AI analysis failed: {error}',
   'ai.suggestion_count': '{count} suggestion(s)',
+  'ai.suggest_enable': 'Tip: use --ai flag to enable AI content quality analysis for deeper insights',
 
   // Reporter
   'report.title': 'AdSense Checklist Report',
@@ -279,6 +280,7 @@ const zh: Record<string, string> = {
   'ai.skip': '未配置 AI_API_KEY，跳过 AI 分析',
   'ai.fail': 'AI 分析失败: {error}',
   'ai.suggestion_count': '{count} 条改进建议',
+  'ai.suggest_enable': '提示: 使用 --ai 参数启用 AI 内容质量分析，获取更深入的审查建议',
 
   // 报告
   'report.title': 'AdSense 审核检查报告',

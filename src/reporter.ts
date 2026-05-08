@@ -143,6 +143,14 @@ export function renderTerminalReport(report: CheckReport): string {
   } else {
     lines.push(chalk.green.bold(`  ${t('report.ready', lang)}`));
   }
+
+  // AI suggestion when AI is not enabled
+  const hasAi = report.categories.some(c => c.group === 'soft' && c.name.includes('AI'));
+  if (!hasAi) {
+    lines.push('');
+    lines.push(chalk.cyan(`  💡 ${t('ai.suggest_enable', lang)}`));
+  }
+
   lines.push('');
   return lines.join('\n');
 }

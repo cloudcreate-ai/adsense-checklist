@@ -28,9 +28,9 @@ program
   .version('1.0.0')
   .argument('<url>', 'Website URL to check')
   .option('-j, --json', 'Output JSON to stdout')
-  .option('-m, --max-pages <number>', 'Max structural pages to crawl (Phase 1)', '50')
-  .option('-c, --max-content <number>', 'Max content pages to crawl (Phase 2)', '20')
-  .option('-s, --skip-ai', 'Skip AI analysis', false)
+  .option('-m, --page-limit <number>', 'Max structural pages to crawl (Phase 1)', '50')
+  .option('-c, --content-limit <number>', 'Max content pages to crawl (Phase 2)', '20')
+  .option('--ai', 'Enable AI content quality analysis', false)
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
   .option('-o, --output <dir>', 'Report output directory', 'tmp')
@@ -50,10 +50,10 @@ program
       let lastProgress = '';
       const report = await check({
         url,
-        maxPages: parseInt(opts.maxPages, 10),
-        maxContent: parseInt(opts.maxContent, 10),
+        maxPages: parseInt(opts.pageLimit, 10),
+        maxContent: parseInt(opts.contentLimit, 10),
         siteType,
-        skipAi: opts.skipAi,
+        skipAi: !opts.ai,
         timeout: parseInt(opts.timeout, 10),
         apiKey: opts.apiKey,
         lang,
