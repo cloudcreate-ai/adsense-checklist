@@ -120,6 +120,13 @@ Also classify the page type based on its content and purpose. Choose ONE:
 - "required": About, Privacy, Terms, Contact, Editorial Policy, Legal
 - "utility": Search, Login, Signup, Download, 404, or functional tool pages
 
+IMPORTANT — special handling for "required" and "utility" pages:
+These pages are necessary for site operation. Do NOT penalize them for low value, originality, or relevance.
+- For "required" pages (Privacy, Terms, About, Contact, Legal): set value=10, originality=10, relevance=10 automatically.
+- Only score compliance normally. Check if the page has reasonable content (not empty or placeholder).
+- For "utility" pages (Search, Login, 404): same rule — set value=10, originality=10, relevance=10, only evaluate compliance and basic completeness.
+- For all other page types (homepage, listing, content, game_detail, video_detail, reference_detail): score all four dimensions normally.
+
 Page: ${page.url}
 
 Content:
@@ -144,18 +151,29 @@ Reply in ${langName} with JSON:
     const originalityScore = clampScore(result.originality);
     const relevanceScore = clampScore(result.relevance);
     const complianceScore = clampScore(result.compliance);
-    // Overall status based on geometric mean
-    const geoMean = Math.pow(valueScore * originalityScore * relevanceScore * complianceScore, 0.25);
-    const status: 'pass' | 'warn' | 'fail' = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
     const validPageTypes: PageType[] = ['homepage', 'listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility'];
     const inferredPageType = validPageTypes.includes(result.pageType) ? result.pageType : undefined;
+
+    // For required/utility pages, don't penalize for low value/originality/relevance
+    let finalValueScore = valueScore;
+    let finalOriginalityScore = originalityScore;
+    let finalRelevanceScore = relevanceScore;
+    if (inferredPageType === 'required' || inferredPageType === 'utility') {
+      finalValueScore = 10;
+      finalOriginalityScore = 10;
+      finalRelevanceScore = 10;
+    }
+
+    // Overall status based on geometric mean
+    const geoMean = Math.pow(finalValueScore * finalOriginalityScore * finalRelevanceScore * complianceScore, 0.25);
+    const status: 'pass' | 'warn' | 'fail' = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
     return {
       url: page.url,
       status,
-      relevance: result.relevanceLabel ?? (relevanceScore >= 7 ? 'relevant' : relevanceScore >= 4 ? 'tangential' : 'off-topic'),
-      valueScore,
-      originalityScore,
-      relevanceScore,
+      relevance: result.relevanceLabel ?? (finalRelevanceScore >= 7 ? 'relevant' : finalRelevanceScore >= 4 ? 'tangential' : 'off-topic'),
+      valueScore: finalValueScore,
+      originalityScore: finalOriginalityScore,
+      relevanceScore: finalRelevanceScore,
       complianceScore,
       assessment: result.assessment ?? '',
       suggestions: result.suggestions ?? [],

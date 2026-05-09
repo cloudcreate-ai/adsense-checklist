@@ -35,14 +35,17 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
     const contentRatio = totalChars > 0 ? Math.round((contentChars / totalChars) * 100) : 0;
     const issues: string[] = [];
     let contentStatus: 'pass' | 'warn' | 'fail' = 'pass';
-    if (siteType === 'content') {
-      if (contentRatio < 30 && totalChars > 200) { issues.push(`Content ratio only ${contentRatio}%, mostly boilerplate`); contentStatus = 'fail'; }
-      if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
-    }
     const ai = aiMap.get(page.url);
     const aiStatus = ai?.status;
     const relevance = ai?.relevance;
     const pageType = ai?.inferredPageType ?? classifyPage(page.url);
+
+    // Skip content depth checks for required/utility pages — they don't need 300+ chars of editorial content
+    const isFunctional = pageType === 'required' || pageType === 'utility';
+    if (siteType === 'content' && !isFunctional) {
+      if (contentRatio < 30 && totalChars > 200) { issues.push(`Content ratio only ${contentRatio}%, mostly boilerplate`); contentStatus = 'fail'; }
+      if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
+    }
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
     if (relevance) detail.relevance = relevance;

@@ -161,8 +161,15 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push(chalk.gray(`  (${t('report.pages', lang, { count: report.pages.length })})`));
     lines.push('');
 
-    const problems = report.pages.filter(p => p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
-    const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
+    // Filter out required/utility pages from problems list — they are scored differently
+    const problems = report.pages.filter(p =>
+      (p.pageType !== 'required' && p.pageType !== 'utility')
+      && (p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'))
+    );
+    const ok = report.pages.filter(p =>
+      (p.pageType === 'required' || p.pageType === 'utility')
+      || (p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'))
+    );
 
     for (const p of problems) renderPage(lines, p, lang);
     if (ok.length > 0) lines.push(chalk.gray(`    ${t('report.pages_ok', lang, { count: ok.length })}`));
@@ -320,8 +327,15 @@ export function renderMarkdownReport(report: CheckReport): string {
     lines.push(`### ${t('md.page_details', lang)} (${t('md.pages_count', lang, { count: report.pages.length })})`);
     lines.push('');
 
-    const problems = report.pages.filter(p => p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
-    const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
+    // Filter out required/utility pages from problems list — they are scored differently
+    const problems = report.pages.filter(p =>
+      (p.pageType !== 'required' && p.pageType !== 'utility')
+      && (p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'))
+    );
+    const ok = report.pages.filter(p =>
+      (p.pageType === 'required' || p.pageType === 'utility')
+      || (p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'))
+    );
 
     // Table header
     lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.type', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
