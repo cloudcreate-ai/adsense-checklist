@@ -74,6 +74,21 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.bold(`  ${t('report.composite_score', lang)}: `) + scoreColor(`${report.compositeScore}/100`));
   lines.push('');
 
+  // Review verdict
+  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
+  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
+  lines.push(chalk.bold(`  ${t('report.verdict_title', lang)}`));
+  if (report.hardStatus === 'fail') {
+    lines.push(chalk.red.bold(`  NOT READY — ${hardFailCount} ${t('report.verdict_fail_suffix', lang)}`));
+  } else if (report.hardStatus === 'warn') {
+    lines.push(chalk.yellow.bold(`  NEEDS FIXES — ${hardWarnCount} ${t('report.verdict_warn_suffix', lang)}`));
+  } else if (report.warned > 0) {
+    lines.push(chalk.yellow.bold(`  MOSTLY READY — ${t('report.mostly', lang, { count: report.warned }).replace(/^MOSTLY READY — /, '')}`));
+  } else {
+    lines.push(chalk.green.bold(`  ${t('report.ready', lang)}`));
+  }
+  lines.push('');
+
   // ── Hard Requirements ──
   const hardColor = report.hardStatus === 'ready' ? chalk.green : report.hardStatus === 'warn' ? chalk.yellow : chalk.red;
   const hardLabel = report.hardStatus === 'ready' ? 'PASS' : report.hardStatus === 'warn' ? 'WARN' : 'FAIL';
@@ -86,8 +101,6 @@ export function renderTerminalReport(report: CheckReport): string {
     }
   }
   const hardStatusKey = `report.hard.${report.hardStatus}` as string;
-  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
-  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
   const hardStatusMsg = report.hardStatus === 'ready'
     ? t(hardStatusKey, lang)
     : t(hardStatusKey, lang, { count: report.hardStatus === 'fail' ? hardFailCount : hardWarnCount });
@@ -120,7 +133,7 @@ export function renderTerminalReport(report: CheckReport): string {
   if (report.aiDimensionAverages) {
     const d = report.aiDimensionAverages;
     const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
-    const dimLabel = (key: string, v: number) => `${t(`reporter.dim_${key}`, lang)} ${v}`;
+    const dimLabel = (key: string, v: number) => `${t(`reporter.dim_${key}`, lang)} ${v}/10`;
     lines.push(chalk.gray(`  │  ${t('reporter.ai_dimensions', lang)}: `) +
       `${dimColor(d.value)(dimLabel('value', d.value))} ` +
       `${dimColor(d.originality)(dimLabel('originality', d.originality))} ` +
@@ -131,19 +144,6 @@ export function renderTerminalReport(report: CheckReport): string {
   }
   lines.push(chalk.gray(`  └─`));
   lines.push('');
-
-  // Category score breakdown (bars)
-  if (report.categoryScores.length > 0) {
-    for (const cs of report.categoryScores) {
-      const isAiCat = cs.name.includes('AI') || cs.name.includes('ai');
-      const pct = isAiCat && report.siteAiScore > 0
-        ? report.siteAiScore
-        : (cs.maxScore > 0 ? Math.round((cs.score / cs.maxScore) * 100) : 0);
-      const bar = renderBar(pct, 100);
-      lines.push(`    ${bar} ${pct}%  ${cs.name}`);
-    }
-    lines.push('');
-  }
 
   // Detailed checks
   for (const cat of report.categories) {
@@ -179,19 +179,6 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push('');
   }
 
-  lines.push(chalk.bold(`  ${t('report.score', lang)}: `) + `${report.score}/${report.totalChecks}`);
-
-  // Summary line
-  if (report.hardStatus === 'fail') {
-    lines.push(chalk.red.bold(`  ${t('report.notready', lang, { count: hardFailCount })}`));
-  } else if (report.hardStatus === 'warn') {
-    lines.push(chalk.yellow.bold(`  ${t('report.hard.warn', lang, { count: hardWarnCount })}`));
-  } else if (report.warned > 0) {
-    lines.push(chalk.yellow.bold(`  ${t('report.mostly', lang, { count: report.warned })}`));
-  } else {
-    lines.push(chalk.green.bold(`  ${t('report.ready', lang)}`));
-  }
-
   // AI suggestion when AI is not enabled
   const hasAi = report.categories.some(c => c.group === 'soft' && (c.name.includes('AI') || c.name.includes('ai')));
   if (!hasAi) {
@@ -224,8 +211,8 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   const aiComposite = (page.ai?.valueScore != null && page.ai?.originalityScore != null && page.ai?.relevanceScore != null && page.ai?.complianceScore != null)
     ? Math.round(Math.pow(page.ai.valueScore * page.ai.originalityScore * page.ai.relevanceScore * page.ai.complianceScore, 0.25) * 10)
     : null;
-  const aiColor = aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red;
-  const aiScoreText = aiColor(`AI ${aiComposite}/100`);
+  const aiColor = aiComposite != null ? (aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red) : null;
+  const aiScoreText = aiColor ? aiColor(`AI ${aiComposite}/100`) : null;
   const scoreLabels = aiComposite != null
     ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${t('reporter.advanced_label', lang)}: ${aiScoreText}`
     : `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')}`;
@@ -284,9 +271,23 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push(`## ${t('md.composite_score_title', lang)}: ${report.compositeScore}/100`);
   lines.push('');
 
-  // Hard requirements
+  // Review verdict
   const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
   const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
+  lines.push(`## ${t('md.verdict_title', lang)}`);
+  lines.push('');
+  if (report.hardStatus === 'fail') {
+    lines.push(t('md.summary.not_ready', lang, { count: hardFailCount }));
+  } else if (report.hardStatus === 'warn') {
+    lines.push(t('md.summary.needs_fixes', lang, { count: hardWarnCount }));
+  } else if (report.warned > 0) {
+    lines.push(t('md.summary.mostly_ready', lang, { count: report.warned }));
+  } else {
+    lines.push(t('md.summary.ready', lang));
+  }
+  lines.push('');
+
+  // Hard requirements
   const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';
   lines.push(`### ${t('md.hard_requirements', lang)} ${hardLabel}`);
   lines.push('');
@@ -333,7 +334,7 @@ export function renderMarkdownReport(report: CheckReport): string {
 
   // Composite formula
   const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
-  lines.push(`> Hard ${Math.round(hardContrib)}% × 0.4 + Soft ${report.softScore}% × 0.6 - Penalty ${report.warningPenalty} = ${report.compositeScore}`);
+  lines.push(`> ${t('md.formula', lang, { hardPct: Math.round(hardContrib), softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`);
   lines.push('');
 
   // Page details
@@ -381,7 +382,7 @@ export function renderMarkdownReport(report: CheckReport): string {
           ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
           : null;
         const scoreLabels = aiComposite != null
-          ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: ${aiComposite}/100`
+          ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: AI ${aiComposite}/100`
           : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
         lines.push(`**[${path}](${p.url})** (${scoreLabels})`);
         lines.push('');
@@ -404,18 +405,6 @@ export function renderMarkdownReport(report: CheckReport): string {
       }
     }
   }
-
-  // Summary
-  if (report.hardStatus === 'fail') {
-    lines.push(t('md.summary.not_ready', lang, { count: hardFailCount }));
-  } else if (report.hardStatus === 'warn') {
-    lines.push(t('md.summary.needs_fixes', lang, { count: hardWarnCount }));
-  } else if (report.warned > 0) {
-    lines.push(t('md.summary.mostly_ready', lang, { count: report.warned }));
-  } else {
-    lines.push(t('md.summary.ready', lang));
-  }
-  lines.push('');
 
   return lines.join('\n');
 }
