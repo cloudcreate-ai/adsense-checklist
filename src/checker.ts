@@ -39,10 +39,10 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
       if (contentRatio < 30 && totalChars > 200) { issues.push(`Content ratio only ${contentRatio}%, mostly boilerplate`); contentStatus = 'fail'; }
       if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
     }
-    const pageType = classifyPage(page.url);
     const ai = aiMap.get(page.url);
     const aiStatus = ai?.status;
     const relevance = ai?.relevance;
+    const pageType = ai?.inferredPageType ?? classifyPage(page.url);
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
     if (relevance) detail.relevance = relevance;

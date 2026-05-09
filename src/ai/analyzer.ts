@@ -1,4 +1,4 @@
-import type { Lang, SiteTopic } from '../types.js';
+import type { Lang, SiteTopic, PageType } from '../types.js';
 
 export interface AiAnalysis {
   suggestions: string[];
@@ -15,6 +15,8 @@ export interface PageAiAnalysis {
   complianceScore?: number;
   assessment: string;
   suggestions: string[];
+  // AI-inferred page type (overrides URL-based classification when AI is enabled)
+  inferredPageType?: PageType;
 }
 
 export interface FullAiAnalysis extends AiAnalysis {
@@ -108,6 +110,16 @@ Score each dimension from 0 to 10:
    - Only flag actual promotion or facilitation of policy-violating content.
    - If the page appears to be a 404 error page or has minimal content, do not flag it as a compliance violation. Note it as "insufficient content for compliance review".
 
+Also classify the page type based on its content and purpose. Choose ONE:
+- "homepage": The site's main landing page
+- "listing": An index/category page listing multiple items (articles, mods, products)
+- "content": A standalone article, blog post, guide, or tutorial
+- "game_detail": A game page with playable game or game download
+- "video_detail": A page centered around a video or video embed
+- "reference_detail": A wiki entry, glossary term, encyclopedia article, or database record
+- "required": About, Privacy, Terms, Contact, Editorial Policy, Legal
+- "utility": Search, Login, Signup, Download, 404, or functional tool pages
+
 Page: ${page.url}
 
 Content:
@@ -120,6 +132,7 @@ Reply in ${langName} with JSON:
   "relevance": <0-10>,
   "relevanceLabel": "relevant|tangential|off-topic",
   "compliance": <0-10>,
+  "pageType": "homepage|listing|content|game_detail|video_detail|reference_detail|required|utility",
   "assessment": "Brief assessment covering the key findings across all dimensions",
   "suggestions": ["Specific actionable suggestion to improve this page"]
 }`;
@@ -134,6 +147,8 @@ Reply in ${langName} with JSON:
     // Overall status based on geometric mean
     const geoMean = Math.pow(valueScore * originalityScore * relevanceScore * complianceScore, 0.25);
     const status: 'pass' | 'warn' | 'fail' = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
+    const validPageTypes: PageType[] = ['homepage', 'listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility'];
+    const inferredPageType = validPageTypes.includes(result.pageType) ? result.pageType : undefined;
     return {
       url: page.url,
       status,
@@ -144,6 +159,7 @@ Reply in ${langName} with JSON:
       complianceScore,
       assessment: result.assessment ?? '',
       suggestions: result.suggestions ?? [],
+      inferredPageType,
     };
   } catch (err) {
     return {

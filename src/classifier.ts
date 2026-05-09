@@ -9,9 +9,6 @@ const CONTENT_PREFIXES = ['/blog/', '/news/', '/guides/', '/articles/', '/posts/
 // Patterns for game detail pages
 const GAME_PREFIXES = ['/games/', '/game/', '/play/', '/online-games/'];
 
-// Patterns for game mod/resource sites (Minecraft PE, etc.)
-const GAME_MOD_PREFIXES = ['/addons/', '/mods/', '/texture-packs/', '/resource-packs/', '/shaders/', '/maps/', '/skins/', '/seeds/', '/clients/'];
-
 // Patterns for video detail pages
 const VIDEO_PREFIXES = ['/videos/', '/video/', '/watch/', '/v/', '/shorts/', '/clip/', '/stream/'];
 
@@ -22,7 +19,7 @@ const REFERENCE_PREFIXES = ['/wiki/', '/reference/', '/docs/', '/encyclopedia/',
 const REFERENCE_LISTING_PATHS = ['/wiki', '/reference', '/docs', '/encyclopedia', '/glossary', '/knowledge', '/archive', '/database', '/transcript'];
 
 // Patterns for listing/index pages
-const LISTING_PATHS = ['/blog', '/news', '/guides', '/articles', '/games', '/play', '/videos', '/watch', '/channels', '/categories', '/tags', '/archive', ...GAME_MOD_PREFIXES.map(p => p.replace(/\/$/, ''))];
+const LISTING_PATHS = ['/blog', '/news', '/guides', '/articles', '/games', '/play', '/videos', '/watch', '/channels', '/categories', '/tags', '/archive'];
 
 // Patterns for utility pages
 const UTILITY_PATTERNS = [/\/download/i, /\/search/i, /\/login/i, /\/signup/i, /\/register/i, /\/sitemap/i, /\/404/i];
@@ -59,15 +56,6 @@ export function classifyPage(url: string): PageType {
     if (normalizedPath.startsWith(prefix.replace(/\/$/, '/'))) {
       const suffix = normalizedPath.slice(prefix.replace(/\/$/, '').length);
       if (suffix.length > 1) return 'game_detail';
-    }
-  }
-
-  // Game mod/resource detail pages (Minecraft PE mods, addons, etc.)
-  for (const prefix of GAME_MOD_PREFIXES) {
-    if (normalizedPath.startsWith(prefix)) {
-      const suffix = normalizedPath.slice(prefix.length);
-      // Multi-level or single-level slug = detail page; bare path = listing
-      if (suffix.length > 0) return 'game_detail';
     }
   }
 
@@ -129,11 +117,6 @@ export function classifyPage(url: string): PageType {
     }
     if (REQUIRED_PATTERNS.some(p => p.test(rest))) return 'required';
   }
-
-  // Generic fallback: multi-segment paths are likely content pages
-  // (e.g., /zombie-apocalypse-modpack/ for a Minecraft mod detail page)
-  const segments = normalizedPath.split('/').filter(Boolean);
-  if (segments.length >= 1) return 'content';
 
   return 'unknown';
 }
