@@ -308,6 +308,9 @@ export function renderMarkdownReport(report: CheckReport): string {
     for (const item of cat.items) {
       lines.push(`  - ${MD_ICONS[item.status]} ${item.name}: ${item.message}`);
       if (item.detail) lines.push(`    - ${item.detail}`);
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(`    - ${d}`);
+      }
     }
   }
   lines.push('');
