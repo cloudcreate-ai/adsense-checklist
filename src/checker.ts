@@ -5,7 +5,7 @@ import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
-import { analyzeWithAI, type PageAiAnalysis } from './ai/analyzer.js';
+import { analyzeWithAI, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
@@ -151,24 +151,40 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     ];
     const allSignals: PageSignals[] = [homeData.signals];
 
-    const internalLinks = homeData.links.filter(l => { try { return new URL(l).origin === origin && isContentUrl(l); } catch { return false; } });
+    const internalLinks = homeData.links.filter(l => {
+      try {
+        const u = new URL(l);
+        if (u.origin !== origin) return false;
+        if (!isContentUrl(l)) return false;
+        // Skip root-path querystring URLs — SPA search pages all resolve to the same /
+        if (u.pathname === '/' && u.search.length > 0) return false;
+        return true;
+      } catch { return false; }
+    });
     const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin && isContentUrl(u); } catch { return false; } });
     const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
     const uniqueLinks = allInternal.slice(0, phase1Limit);
 
     const deadLinks: string[] = [];
-    const crawledUrls = new Set([url.replace(/\/+$/, '')]);
+    const crawledUrls = new Set([homeData.url.replace(/\/+$/, '')]);
 
     async function crawlPage(link: string) {
-      const norm = link.replace(/\/+$/, '');
+      const norm = link.replace(/\/+$/, '').split('#')[0];
       if (crawledUrls.has(norm)) return;
       crawledUrls.add(norm);
       try {
         const pg = await browser.newPage();
         const data = await fetchPage(pg, link, timeout);
+        const postNorm = data.url.replace(/\/+$/, '').split('#')[0];
+        // Skip if SPA navigation resolved to an already-crawled page
+        if (crawledUrls.has(postNorm) && postNorm !== norm) {
+          await pg.close();
+          return;
+        }
+        crawledUrls.add(postNorm);
         if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); }
         else {
-          pages.push({ url: link, text: data.text, title: data.title, links: data.links });
+          pages.push({ url: data.url, text: data.text, title: data.title, links: data.links });
           allSignals.push(data.signals);
         }
         await pg.close();
@@ -179,7 +195,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     progress(`Phase 1: Crawling ${uniqueLinks.length} pages...`);
     for (let i = 0; i < uniqueLinks.length; i++) {
       const link = uniqueLinks[i];
-      progress(`Phase 1: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}`);
+      progress(`Phase 1: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
       await crawlPage(link);
     }
 
@@ -191,7 +207,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // BFS discovery: follow listing pages up to MAX_DISCOVERY_DEPTH
     const discoveryQueue: Array<{ url: string; links: string[]; depth: number }> =
       pages.map(p => ({ url: p.url, links: p.links, depth: 0 }));
-    const seenInDiscovery = new Set<string>([...crawledUrls].map(u => u.replace(/\/+$/, '')));
+    const seenInDiscovery = new Set<string>([...crawledUrls].map(u => u.replace(/\/+$/, '').split('#')[0]));
 
     while (discoveryQueue.length > 0) {
       const current = discoveryQueue.shift()!;
@@ -232,7 +248,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} content pages (from ${discoveredContent.size} discovered)...`);
     for (let i = 0; i < toCrawl.length; i++) {
       const link = toCrawl[i];
-      progress(`Phase 2: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}`);
+      progress(`Phase 2: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}${new URL(link).search}`);
       await crawlPage(link);
 
       // After crawling a page, check if it has deeper content links we missed
@@ -340,11 +356,63 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         allCategories.push({ name: t('group.ai_value', lang), items: aiItems, group: 'soft' });
 
         // Compliance hard check: flag pages with serious violations
-        const seriousViolations = pageAnalyses.filter(a => (a.complianceScore ?? 5) <= 2);
-        const suspiciousPages = pageAnalyses.filter(a => {
+        let suspiciousPages = pageAnalyses.filter(a => {
           const c = a.complianceScore ?? 5;
           return c > 2 && c <= 5;
         });
+
+        // Also recheck very low-score pages with short text (likely 404/error pages being false-flagged)
+        const shortTextPages = pageAnalyses.filter(a => {
+          const c = a.complianceScore ?? 5;
+          const text = uniquePages.find(up => up.url === a.url)?.text ?? '';
+          return c <= 2 && text.replace(/\s+/g, '').length < 200;
+        });
+        const recheckUrls = new Set(suspiciousPages.map(p => p.url));
+        for (const p of shortTextPages) {
+          if (!recheckUrls.has(p.url)) {
+            suspiciousPages.push(p);
+            recheckUrls.add(p.url);
+          }
+        }
+
+        // Second-pass compliance check for suspicious pages to reduce false positives
+        if (suspiciousPages.length > 0) {
+          const apiKeyResolved2 = apiKey || process.env.AI_API_KEY;
+          if (apiKeyResolved2) {
+            const recheckResults = await recheckCompliance(
+              suspiciousPages.map(p => ({
+                url: p.url,
+                text: uniquePages.find(up => up.url === p.url)?.text ?? '',
+                firstComplianceScore: p.complianceScore ?? 5,
+              })),
+              lang,
+              progress
+            );
+            // Update page analyses with re-checked scores
+            for (const analysis of pageAnalyses) {
+              const recheck = recheckResults.get(analysis.url);
+              if (recheck) {
+                analysis.complianceScore = recheck.complianceScore;
+              }
+            }
+            // Recompute statuses based on updated scores
+            for (const analysis of pageAnalyses) {
+              const v = analysis.valueScore ?? 5;
+              const o = analysis.originalityScore ?? 5;
+              const r = analysis.relevanceScore ?? 5;
+              const c = analysis.complianceScore ?? 5;
+              const geoMean = Math.pow(v * o * r * c, 0.25);
+              analysis.status = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
+            }
+            // Recompute suspicious pages after re-check
+            suspiciousPages = pageAnalyses.filter(a => {
+              const c = a.complianceScore ?? 5;
+              return c > 2 && c <= 5;
+            });
+          }
+        }
+
+        const seriousViolations = pageAnalyses.filter(a => (a.complianceScore ?? 5) <= 2);
         const complianceItems: CheckItem[] = [];
         if (seriousViolations.length > 0) {
           complianceItems.push({
@@ -367,6 +435,21 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
           });
         }
         allCategories.push({ name: t('group.policy_compliance', lang), items: complianceItems, group: 'hard' });
+
+        // If keyword check was 'fail' but AI compliance is strong, downgrade to 'warn'
+        // The AI understands context; the keyword check is a blunt regex instrument
+        const avgCompliance = pageAnalyses.length > 0
+          ? pageAnalyses.reduce((s, a) => s + (a.complianceScore ?? 5), 0) / pageAnalyses.length
+          : 5;
+        if (avgCompliance >= 7) {
+          const policyCat = allCategories.find(c => c.name === t('cat.policy', lang));
+          if (policyCat) {
+            const keywordItem = policyCat.items.find(i => i.name === t('item.policy.keywords', lang));
+            if (keywordItem && keywordItem.status === 'fail') {
+              keywordItem.status = 'warn';
+            }
+          }
+        }
       } catch (err) {
         allCategories.push({ name: t('group.ai_value', lang), items: [{ name: 'AI', status: 'skip', message: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) }], group: 'soft' });
       }

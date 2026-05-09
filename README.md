@@ -1,6 +1,6 @@
 # @cloudcreate/adsense-check
 
-Automated website checker for Google AdSense review requirements. Detects "low value content" — the #1 rejection reason. Supports content sites, tool sites, and game sites with AI-powered topic analysis and content relevance checking.
+Automated website checker for Google AdSense review requirements. Detects "low value content" — the #1 rejection reason. Supports content sites, tool sites, game sites, video sites, and reference sites with AI-powered topic analysis and content relevance checking.
 
 ## Install
 
@@ -43,9 +43,11 @@ Automatically classifies websites into three supported types:
 
 | Type | Description | Examples |
 |------|-------------|----------|
-| **Content** | News, blogs, reference material | theexceltranslator.com |
+| **Content** | News, blogs, educational articles, guides | theexceltranslator.com |
 | **Tool** | Online calculators, converters, generators | ishowspeedsaid.com |
 | **Game** | Online games, game portals | popstone2.com |
+| **Video** | Video sharing, video blogs, YouTube-style sites | — |
+| **Reference** | Wiki, encyclopedia, glossary, knowledge base | — |
 | **Unsupported** | Other types (e-commerce, social, etc.) | — |
 
 AI analysis classifies the site type and topic. Falls back to DOM signal detection when AI is unavailable.
@@ -55,7 +57,7 @@ AI analysis classifies the site type and topic. Falls back to DOM signal detecti
 With `--ai`, the tool analyzes the homepage to determine:
 - **Topic**: What the site is about (e.g., "online match-3 puzzle games")
 - **Description**: One-line summary of the site's purpose
-- **Type**: content / tool / game / unsupported
+- **Type**: content / tool / game / video / reference / unsupported
 
 ### Content Relevance Checking
 
@@ -124,7 +126,7 @@ adsense-check <site> --page <url> --ai
 -o, --output <dir>        Report output dir (default: tmp)
 --no-save                 Skip auto-saving report
 -l, --lang <lang>         Output language: en|zh (default: en)
---type <type>             Force site type: content|tool|game
+--type <type>             Force site type: content|tool|game|video|reference
 --detect-only             Only detect site type/topic, skip full check
 ```
 

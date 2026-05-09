@@ -4,13 +4,22 @@ import type { PageType } from './types.js';
 const REQUIRED_PATTERNS = [/\/about/i, /\/privacy/i, /\/contact/i, /\/terms/i, /\/legal/i];
 
 // Patterns for content pages (blog posts, articles, guides)
-const CONTENT_PREFIXES = ['/blog/', '/news/', '/guides/', '/articles/', '/posts/', '/tutorials/', '/wiki/'];
+const CONTENT_PREFIXES = ['/blog/', '/news/', '/guides/', '/articles/', '/posts/', '/tutorials/'];
 
 // Patterns for game detail pages
 const GAME_PREFIXES = ['/games/', '/game/', '/play/', '/online-games/'];
 
+// Patterns for video detail pages
+const VIDEO_PREFIXES = ['/videos/', '/video/', '/watch/', '/v/', '/shorts/', '/clip/', '/stream/'];
+
+// Patterns for reference/Wiki pages
+const REFERENCE_PREFIXES = ['/wiki/', '/reference/', '/docs/', '/encyclopedia/', '/glossary/', '/knowledge/', '/archive/', '/database/', '/transcript/'];
+
+// Patterns for reference listing/index pages
+const REFERENCE_LISTING_PATHS = ['/wiki', '/reference', '/docs', '/encyclopedia', '/glossary', '/knowledge', '/archive', '/database', '/transcript'];
+
 // Patterns for listing/index pages
-const LISTING_PATHS = ['/blog', '/news', '/guides', '/articles', '/games', '/play', '/categories', '/tags', '/archive'];
+const LISTING_PATHS = ['/blog', '/news', '/guides', '/articles', '/games', '/play', '/videos', '/watch', '/channels', '/categories', '/tags', '/archive'];
 
 // Patterns for utility pages
 const UTILITY_PATTERNS = [/\/download/i, /\/search/i, /\/login/i, /\/signup/i, /\/register/i, /\/sitemap/i, /\/404/i];
@@ -50,6 +59,25 @@ export function classifyPage(url: string): PageType {
     }
   }
 
+  // Video detail pages
+  for (const prefix of VIDEO_PREFIXES) {
+    if (normalizedPath.startsWith(prefix.replace(/\/$/, '/'))) {
+      const suffix = normalizedPath.slice(prefix.replace(/\/$/, '').length);
+      if (suffix.length > 1) return 'video_detail';
+    }
+  }
+
+  // Reference detail pages
+  for (const prefix of REFERENCE_PREFIXES) {
+    if (normalizedPath.startsWith(prefix.replace(/\/$/, '/'))) {
+      const suffix = normalizedPath.slice(prefix.replace(/\/$/, '').length);
+      if (suffix.length > 1) return 'reference_detail';
+    }
+  }
+
+  // Reference listing pages
+  if (REFERENCE_LISTING_PATHS.some(p => normalizedPath === p || normalizedPath === p.replace(/\/$/, ''))) return 'reference_listing';
+
   // Listing pages
   if (LISTING_PATHS.some(p => normalizedPath === p || normalizedPath === p.replace(/\/$/, ''))) return 'listing';
 
@@ -73,6 +101,20 @@ export function classifyPage(url: string): PageType {
         return 'listing';
       }
     }
+    for (const prefix of VIDEO_PREFIXES) {
+      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
+        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+        if (suffix.length > 1) return 'video_detail';
+        return 'listing';
+      }
+    }
+    for (const prefix of REFERENCE_PREFIXES) {
+      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
+        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+        if (suffix.length > 1) return 'reference_detail';
+        return 'reference_listing';
+      }
+    }
     if (REQUIRED_PATTERNS.some(p => p.test(rest))) return 'required';
   }
 
@@ -84,8 +126,11 @@ export const PAGE_TYPE_WEIGHTS: Record<PageType, number> = {
   homepage: 10,
   content: 8,
   game_detail: 8,
+  video_detail: 8,
+  reference_detail: 8,
   required: 7,
   listing: 4,
+  reference_listing: 4,
   utility: 2,
   unknown: 3,
 };

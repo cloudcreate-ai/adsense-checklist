@@ -1,7 +1,7 @@
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
 export type Lang = string;
-export type SiteType = 'content' | 'tool' | 'game' | 'unsupported';
-export type PageType = 'homepage' | 'content' | 'game_detail' | 'required' | 'listing' | 'utility' | 'unknown';
+export type SiteType = 'content' | 'tool' | 'game' | 'video' | 'reference' | 'unsupported';
+export type PageType = 'homepage' | 'content' | 'game_detail' | 'video_detail' | 'reference_detail' | 'reference_listing' | 'required' | 'listing' | 'utility' | 'unknown';
 
 export interface CheckItem {
   name: string;

@@ -44,7 +44,7 @@ program
   .option('-o, --output <dir>', 'Report output directory', 'tmp')
   .option('--no-save', 'Skip auto-saving report')
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
-  .option('--type <type>', 'Force site type (content|tool|game), skip auto-detection')
+  .option('--type <type>', 'Force site type (content|tool|game|video|reference), skip auto-detection')
   .option('--detect-only', 'Only detect site type/topic, skip full check')
   .option('--page <url>', 'Analyze a single page value (AI four-dimension scoring)')
   .action(async (url: string, opts) => {

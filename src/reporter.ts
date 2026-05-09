@@ -196,6 +196,9 @@ const PAGE_TYPE_ICONS: Record<string, string> = {
   homepage: chalk.cyan('*'),
   content: chalk.green('A'),
   game_detail: chalk.blue('G'),
+  video_detail: chalk.cyan('V'),
+  reference_detail: chalk.magenta('R'),
+  reference_listing: chalk.magenta('r'),
   required: chalk.yellow('!'),
   listing: chalk.gray('L'),
   utility: chalk.gray('#'),
@@ -320,18 +323,21 @@ export function renderMarkdownReport(report: CheckReport): string {
     const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
 
     // Table header
-    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | V | O | R | C | 标题 |`);
-    lines.push(`|------|------|------|------|--------|---|---|---|---|------|`);
+    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | V | O | R | C | AI综合 | 标题 |`);
+    lines.push(`|------|------|------|------|--------|---|---|---|---|--------|------|`);
 
     for (const p of [...problems, ...ok]) {
-      const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
+      const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
       const status = MD_ICONS[p.contentStatus];
       const ai = p.ai;
       const v = ai?.valueScore != null ? ai.valueScore : '-';
       const o = ai?.originalityScore != null ? ai.originalityScore : '-';
       const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
       const c = ai?.complianceScore != null ? ai.complianceScore : '-';
-      lines.push(`| ${status} | ${p.pageType} | \`${path}\` | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${p.title} |`);
+      const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
+        ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
+        : '-';
+      lines.push(`| ${status} | ${p.pageType} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${aiComposite} | ${p.title} |`);
     }
     lines.push('');
 
@@ -341,8 +347,8 @@ export function renderMarkdownReport(report: CheckReport): string {
       lines.push(`#### 问题页面详情`);
       lines.push('');
       for (const p of detailPages) {
-        const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
-        lines.push(`**${path}** (mechanical: ${p.score}/100)`);
+        const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
+        lines.push(`**[${path}](${p.url})** (mechanical: ${p.score}/100)`);
         lines.push('');
         for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
         if (p.ai) {

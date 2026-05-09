@@ -11,19 +11,37 @@ const BLACKLIST = [
 
 export function checkPolicyCompliance(pages: Array<{ url: string; text: string }>, lang: Lang): CheckCategory {
   const items: CheckItem[] = [];
-  const violations: Array<{ url: string; match: string }> = [];
+  const violations: Array<{ url: string; match: string; hasSubstance: boolean }> = [];
 
   for (const page of pages) {
     for (const p of BLACKLIST) {
       const m = page.text.match(p);
-      if (m) violations.push({ url: page.url, match: m[0] });
+      if (m) {
+        const hasSubstance = page.text.replace(/\s+/g, '').length > 200;
+        violations.push({ url: page.url, match: m[0], hasSubstance });
+      }
     }
   }
 
-  items.push(violations.length > 0
-    ? { name: t('item.policy.keywords', lang), status: 'fail', message: t('policy.keywords.fail', lang, { count: violations.length }), detail: violations.map(v => `${v.url}: "${v.match}"`).join('; ') }
-    : { name: t('item.policy.keywords', lang), status: 'pass', message: t('policy.keywords.pass', lang) }
-  );
+  // If all matches are on pages with substantial content, downgrade to warn
+  // (the AI compliance check understands context; keyword regex is blunt)
+  const allHaveSubstance = violations.length > 0 && violations.every(v => v.hasSubstance);
+  const status: 'fail' | 'warn' | 'pass' = violations.length === 0
+    ? 'pass'
+    : allHaveSubstance
+      ? 'warn'
+      : 'fail';
+
+  items.push({
+    name: t('item.policy.keywords', lang),
+    status,
+    message: violations.length > 0
+      ? t('policy.keywords.fail', lang, { count: violations.length })
+      : t('policy.keywords.pass', lang),
+    detail: violations.length > 0
+      ? violations.map(v => `${new URL(v.url).pathname}: "${v.match}"`).join('; ')
+      : undefined,
+  });
 
   return { name: t('cat.policy', lang), items };
 }

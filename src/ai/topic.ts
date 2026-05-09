@@ -39,7 +39,7 @@ function extractJson(text: string): any {
   throw new Error('No JSON found in response');
 }
 
-const VALID_TYPES: SiteType[] = ['content', 'tool', 'game'];
+const VALID_TYPES: SiteType[] = ['content', 'tool', 'game', 'video', 'reference'];
 
 export async function analyzeSiteTopic(
   homepage: { title: string; text: string; navText: string },
@@ -57,16 +57,18 @@ Homepage content (first 2000 chars):
 ${content}
 
 Classify this website into ONE of these types:
-- "content": informational site (news, blog, reference materials, educational content)
+- "content": informational site (news, blog, educational articles, guides)
 - "tool": utility/tool site (calculator, converter, generator, online tool)
 - "game": online game site (playable games, game portal)
+- "video": video site (video sharing, video blog, YouTube-style site with embedded videos)
+- "reference": wiki/encyclopedia/reference site (structured knowledge base, searchable database, glossary, dictionary, encyclopedia-style content with interlinked articles, transcript archive)
 - "unsupported": e-commerce, SaaS product, social media, forum, portfolio, or anything not fitting above categories
 
 Reply language: ${langName}
 
 Reply in ${langName} with JSON:
 {
-  "type": "content|tool|game|unsupported",
+  "type": "content|tool|game|video|reference|unsupported",
   "topic": "Main topic in 3-5 words (e.g. 'Excel translation reference')",
   "description": "One sentence describing what this site does",
   "confidence": "high|medium|low",

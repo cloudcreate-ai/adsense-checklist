@@ -2,7 +2,7 @@
 
 ## 评分体系
 
-采用**两组评分**：硬性要求（Hard）+ 柔性评分（Soft）。
+支持内容站、工具站、游戏站、视频站、参考站的自动化检查。采用**两组评分**：硬性要求（Hard）+ 柔性评分（Soft）。
 
 ```
 综合评分 = 硬性通过率 × 0.4 + 柔性得分 × 0.6 - 警告扣分
@@ -146,9 +146,12 @@ siteAiScore = Σ(pageAiScore × typeWeight) / Σ(typeWeight)
 | homepage | 1.5 | 首页是站点门面 |
 | content | 1.0 | 核心内容页 |
 | game_detail | 1.0 | 游戏站核心内容 |
+| video_detail | 1.0 | 视频站核心内容 |
+| reference_detail | 1.0 | 参考站核心内容 |
 | unknown | 0.5 | 未知页面 |
 | required | 0.2 | 法律/必要页面 |
 | listing | 0.1 | 列表/导航页 |
+| reference_listing | 0.1 | 参考站列表页 |
 | utility | 0.1 | 功能性页面 |
 
 页面类型由 URL 路径自动判定（见 `classifier.ts`）。
@@ -178,7 +181,7 @@ Overall: 86/100 (geometric mean)
 ### AI 主题分析（`--ai`）
 
 调用 AI 分析首页标题、导航、正文，判断：
-- 站点类型：content / tool / game / unsupported
+- 站点类型：content / tool / game / video / reference / unsupported
 - 主题关键词
 - 一句话描述
 
@@ -186,6 +189,8 @@ Overall: 86/100 (geometric mean)
 
 当 AI 不可用时，基于 DOM 信号判断：
 - **Game**: iframe 游戏嵌入、canvas 标签、游戏相关链接
+- **Video**: YouTube/Vimeo/B站等视频 iframe 嵌入、`<video>` 标签、视频导航关键词
+- **Reference**: 高文章比例、导航中含 wiki/encyclopedia/glossary 等关键词、低 iframe 比例
 - **Tool**: 导航中含 calculator/converter/generator/tool 等关键词
 - **Content**: 默认类型
 
@@ -196,6 +201,8 @@ Overall: 86/100 (geometric mean)
 | Content | ≥ 300 字/页 | 正文占比重点检查 |
 | Tool | ≥ 300 字/页 | 同 content 标准 |
 | Game | ≥ 100 字/页（游戏描述） | 宽松的内容深度要求 |
+| Video | ≥ 50 字/页（视频描述） | 视频描述文字 + 多样性检查 |
+| Reference | ≥ 100 字/页（参考条目） | 参考条目结构 + 多样性检查 |
 | Unsupported | — | 跳过检查，直接警告 |
 
 ## 抽样策略

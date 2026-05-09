@@ -219,6 +219,94 @@ function checkGameSite(
   return items;
 }
 
+// ─── Video-site specific checks ────────────────────────────────────
+
+function checkVideoSite(
+  pages: Array<{ url: string; text: string; title: string }>,
+  pagesSignals: Array<{ iframeCount: number; iframeSrcs: string[]; canvasCount: number; textLength: number }>,
+  lang: Lang
+): CheckItem[] {
+  const items: CheckItem[] = [];
+
+  // 1. Video Description — check if video pages have sufficient description text (50+ chars)
+  const subpages = pages.slice(1);
+  const subpageSignals = pagesSignals.slice(1);
+  if (subpages.length > 0) {
+    let thinDesc = 0;
+    const thinPages: string[] = [];
+    for (let i = 0; i < subpages.length; i++) {
+      const sig = subpageSignals[i];
+      if (sig && sig.textLength < 50) {
+        thinDesc++;
+        try { thinPages.push(new URL(subpages[i].url).pathname); } catch { thinPages.push(subpages[i].url); }
+      }
+    }
+    if (subpages.length > 0) {
+      const ratio = thinDesc / subpages.length;
+      items.push(ratio > 0.5
+        ? { name: t('item.content.video_desc', lang), status: 'warn', message: t('content.video_desc.warn', lang, { thin: thinDesc, total: subpages.length }), detail: thinPages.slice(0, 5).join(', ') }
+        : { name: t('item.content.video_desc', lang), status: 'pass', message: t('content.video_desc.pass', lang, { total: subpages.length }) }
+      );
+    }
+  }
+
+  // 2. Video Variety — check if video pages have sufficient diversity
+  if (subpages.length >= 3) {
+    const tpl = detectTemplatePages(subpages);
+    items.push({
+      name: t('item.content.video_variety', lang),
+      status: tpl.isTemplate ? 'warn' : 'pass',
+      message: t(tpl.isTemplate ? 'content.video_variety.warn' : 'content.video_variety.pass', lang, { pct: tpl.similarity }),
+    });
+  }
+
+  return items;
+}
+
+// ─── Reference-site specific checks ────────────────────────────────
+
+function checkReferenceSite(
+  pages: Array<{ url: string; text: string; title: string }>,
+  pagesSignals: Array<{ iframeCount: number; iframeSrcs: string[]; canvasCount: number; textLength: number }>,
+  lang: Lang
+): CheckItem[] {
+  const items: CheckItem[] = [];
+
+  // 1. Entry completeness — check if reference entries have basic structure (100+ chars)
+  const subpages = pages.slice(1);
+  const subpageSignals = pagesSignals.slice(1);
+  if (subpages.length > 0) {
+    let thinEntries = 0;
+    const thinPages: string[] = [];
+    for (let i = 0; i < subpages.length; i++) {
+      const sig = subpageSignals[i];
+      if (sig && sig.textLength < 100) {
+        thinEntries++;
+        try { thinPages.push(new URL(subpages[i].url).pathname); } catch { thinPages.push(subpages[i].url); }
+      }
+    }
+    if (subpages.length > 0) {
+      const ratio = thinEntries / subpages.length;
+      items.push(ratio > 0.5
+        ? { name: t('item.content.reference_entry', lang), status: 'warn', message: t('content.reference_entry.warn', lang, { thin: thinEntries, total: subpages.length }), detail: thinPages.slice(0, 5).join(', ') }
+        : { name: t('item.content.reference_entry', lang), status: 'pass', message: t('content.reference_entry.pass', lang) }
+      );
+    }
+  }
+
+  // 2. Reference variety — warn at 70% similarity (higher threshold than game/video)
+  if (subpages.length >= 3) {
+    const tpl = detectTemplatePages(subpages);
+    items.push({
+      name: t('item.content.reference_variety', lang),
+      status: tpl.similarity > 70 ? 'warn' : 'pass',
+      message: t(tpl.similarity > 70 ? 'content.reference_variety.warn' : 'content.reference_variety.pass', lang, { pct: tpl.similarity }),
+    });
+  }
+
+  return items;
+}
+
 // ─── Main entry ────────────────────────────────────────────────────
 
 export function checkContentQuality(
@@ -234,6 +322,16 @@ export function checkContentQuality(
     // Game site: skip text volume checks, add game-specific checks
     if (pagesSignals) {
       items.push(...checkGameSite(pages, pagesSignals, lang));
+    }
+  } else if (siteType === 'video') {
+    // Video site: skip text volume checks, add video-specific checks
+    if (pagesSignals) {
+      items.push(...checkVideoSite(pages, pagesSignals, lang));
+    }
+  } else if (siteType === 'reference') {
+    // Reference site: adapted text thresholds, add reference-specific checks
+    if (pagesSignals) {
+      items.push(...checkReferenceSite(pages, pagesSignals, lang));
     }
   } else {
     // Content site: full text quality checks

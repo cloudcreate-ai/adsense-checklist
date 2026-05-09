@@ -22,6 +22,10 @@ const en: Record<string, string> = {
   'item.content.game_desc': 'Game Descriptions',
   'item.content.iframe_quality': 'Iframe Quality',
   'item.content.game_variety': 'Game Variety',
+  'item.content.video_desc': 'Video Descriptions',
+  'item.content.video_variety': 'Video Variety',
+  'item.content.reference_entry': 'Reference Entries',
+  'item.content.reference_variety': 'Reference Variety',
 
   // Structure items
   'item.structure.internal': 'Internal Links',
@@ -80,9 +84,23 @@ const en: Record<string, string> = {
   'content.game_variety.pass': 'Game pages show good variety',
   'content.game_variety.warn': 'Game pages are {pct}% similar — may look like mass-produced content',
 
+  // Video-specific messages
+  'content.video_desc.pass': '{total} video page(s) have sufficient description text',
+  'content.video_desc.warn': '{thin}/{total} video pages lack description text (recommend 50+ chars)',
+  'content.video_variety.pass': 'Video pages show good variety (similarity {pct}%)',
+  'content.video_variety.warn': 'Video pages are {pct}% similar — may look like mass-produced content',
+
+  // Reference-specific messages
+  'content.reference_entry.pass': 'Reference entries have sufficient structure and metadata',
+  'content.reference_entry.warn': '{thin}/{total} reference entries lack structure (recommend 100+ chars)',
+  'content.reference_variety.pass': 'Reference pages show good variety (similarity {pct}%)',
+  'content.reference_variety.warn': 'Reference pages are {pct}% similar — expected for structured entries',
+
   // Site type detection
   'detector.type.content': 'Content Site',
   'detector.type.game': 'Game Site',
+  'detector.type.video': 'Video Site',
+  'detector.type.reference': 'Reference Site',
   'detector.signals': 'Signals: {details}',
 
   // Required pages messages
@@ -120,6 +138,7 @@ const en: Record<string, string> = {
   // Policy messages
   'policy.keywords.pass': 'No policy-violating keywords found',
   'policy.keywords.fail': '{count} potentially violating keyword(s) found',
+  'policy.keywords.warn': '{count} potentially violating keyword(s) found (on pages with substantial content — verify with AI analysis)',
 
   // AI messages
   'ai.skip': 'AI_API_KEY not configured, skipping AI analysis',
@@ -196,6 +215,10 @@ const zh: Record<string, string> = {
   'item.content.game_desc': '游戏描述',
   'item.content.iframe_quality': 'Iframe 质量',
   'item.content.game_variety': '游戏多样性',
+  'item.content.video_desc': '视频描述',
+  'item.content.video_variety': '视频多样性',
+  'item.content.reference_entry': '参考条目完整性',
+  'item.content.reference_variety': '参考多样性',
 
   // 结构检查项
   'item.structure.internal': '内部链接',
@@ -254,9 +277,23 @@ const zh: Record<string, string> = {
   'content.game_variety.pass': '游戏页面多样性正常',
   'content.game_variety.warn': '游戏页面相似度 {pct}% — 可能是模板批量生成',
 
+  // 视频站专用消息
+  'content.video_desc.pass': '{total} 个视频页面有足够的描述文字',
+  'content.video_desc.warn': '{thin}/{total} 个视频页面缺少描述文字（建议 50+ 字）',
+  'content.video_variety.pass': '视频页面多样性正常 (相似度 {pct}%)',
+  'content.video_variety.warn': '视频页面相似度 {pct}% — 可能是模板批量生成',
+
+  // 参考站专用消息
+  'content.reference_entry.pass': '参考条目具有足够的结构和元数据',
+  'content.reference_entry.warn': '{thin}/{total} 个参考条目结构不足（建议 100+ 字）',
+  'content.reference_variety.pass': '参考页面多样性正常 (相似度 {pct}%)',
+  'content.reference_variety.warn': '参考页面相似度 {pct}% — 结构化条目属于正常',
+
   // 站点类型检测
   'detector.type.content': '内容站',
   'detector.type.game': '游戏站',
+  'detector.type.video': '视频站',
+  'detector.type.reference': '参考站',
   'detector.signals': '检测信号: {details}',
 
   // 必要页面消息
@@ -294,6 +331,7 @@ const zh: Record<string, string> = {
   // 合规消息
   'policy.keywords.pass': '未检测到明显的违规关键词',
   'policy.keywords.fail': '检测到 {count} 个可疑关键词',
+  'policy.keywords.warn': '检测到 {count} 个可疑关键词（位于内容充实页面，请结合 AI 分析确认）',
 
   // AI 消息
   'ai.skip': '未配置 AI_API_KEY，跳过 AI 分析',

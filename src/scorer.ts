@@ -46,11 +46,29 @@ export function scorePage(
       checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
     }
     checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
+  } else if (pageType === 'video_detail') {
+    if (siteType === 'video') {
+      checks.push({ label: 'Video description', status: contentChars >= 50 ? 'pass' : 'warn', weight: 3 });
+      checks.push({ label: 'Content ratio', status: contentRatio >= 15 ? 'pass' : contentRatio >= 5 ? 'warn' : 'fail', weight: 2 });
+    } else {
+      checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
+      checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
+    }
+  } else if (pageType === 'reference_detail') {
+    if (siteType === 'reference') {
+      checks.push({ label: 'Entry completeness', status: contentChars >= 100 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 3 });
+      checks.push({ label: 'Content ratio', status: contentRatio >= 20 ? 'pass' : contentRatio >= 5 ? 'warn' : 'fail', weight: 2 });
+    } else {
+      checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
+      checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
+    }
+  } else if (pageType === 'reference_listing') {
+    checks.push({ label: 'Listing content', status: contentChars >= 200 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 2 });
+  } else if (pageType === 'listing') {
+    checks.push({ label: 'Content', status: contentChars >= 200 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 2 });
   } else if (pageType === 'required') {
     checks.push({ label: 'Exists', status: contentChars > 0 ? 'pass' : 'fail', weight: 3 });
     checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'listing') {
-    checks.push({ label: 'Content', status: contentChars >= 200 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 2 });
   } else if (pageType === 'utility') {
     checks.push({ label: 'Functional', status: contentChars > 0 ? 'pass' : 'warn', weight: 1 });
   } else {
@@ -73,8 +91,11 @@ const AI_PAGE_TYPE_WEIGHTS: Record<PageType, number> = {
   homepage: 1.5,
   content: 1.0,
   game_detail: 1.0,
+  video_detail: 1.0,
+  reference_detail: 1.0,
   unknown: 0.5,
   listing: 0.1,
+  reference_listing: 0.1,
   required: 0.2,
   utility: 0.1,
 };

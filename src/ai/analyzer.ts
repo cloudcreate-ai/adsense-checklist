@@ -102,6 +102,11 @@ Score each dimension from 0 to 10:
    Also set "relevanceLabel": "relevant" | "tangential" | "off-topic".
 4. compliance (0-10): Does the content comply with Google AdSense policies? 10 = fully compliant, 0 = serious violations.
    Flag: adult content, gambling, drugs, violence, copyright infringement, deceptive content.
+   Important context rules:
+   - Words like "crack", "bet", "drug", "gamble" used in educational, news, or informational contexts are NOT violations.
+   - If the page discusses or reports on sensitive topics (e.g., "puzzle crack" as a news headline, "betting odds" in sports analysis), this is NOT a violation.
+   - Only flag actual promotion or facilitation of policy-violating content.
+   - If the page appears to be a 404 error page or has minimal content, do not flag it as a compliance violation. Note it as "insufficient content for compliance review".
 
 Page: ${page.url}
 
@@ -154,6 +159,76 @@ function clampScore(v: any): number {
   const n = Number(v);
   if (isNaN(n)) return 5; // default if missing
   return Math.max(0, Math.min(10, Math.round(n)));
+}
+
+/**
+ * Second-pass compliance check for suspicious pages (compliance 3-5).
+ * Returns updated compliance scores — takes the higher of first and second pass.
+ */
+export async function recheckCompliance(
+  pages: Array<{ url: string; text: string; firstComplianceScore: number }>,
+  langName: string,
+  onProgress?: (msg: string) => void
+): Promise<Map<string, { complianceScore: number; assessment: string }>> {
+  const result = new Map<string, { complianceScore: number; assessment: string }>();
+  if (pages.length === 0) return result;
+
+  const progress = onProgress ?? (() => {});
+  progress(`AI: re-checking ${pages.length} suspicious page(s) for compliance...`);
+
+  for (const page of pages) {
+    const content = page.text.slice(0, PAGE_CHARS);
+    const prompt = `You are a Google AdSense policy compliance expert. A previous analysis flagged this page as potentially non-compliant (score: ${page.firstComplianceScore}/10). Perform a careful second review.
+
+Focus ONLY on compliance. Check for:
+- Adult or sexually explicit content
+- Gambling or casino promotion
+- Illegal drugs or controlled substances
+- Violence, gore, or hate speech
+- Copyright infringement or pirated content
+- Deceptive content, phishing, or scams
+- Excessive profanity
+- Misleading medical/financial claims
+- Content that targets children inappropriately
+
+Be fair — informational/educational content ABOUT sensitive topics (e.g., health articles, news reporting) is NOT a violation. Only flag actual policy violations.
+
+Additional instructions:
+- If the page text is very short (< 200 characters) and appears to be an error page, 404, or placeholder, do not flag any compliance violations. Score compliance as 10 and note "insufficient content".
+- Context matters: words that match policy keywords but appear in news reporting, educational content, or informational discussion are NOT violations.
+
+Page: ${page.url}
+
+Content:
+${content}
+
+Reply in ${langName} with JSON:
+{
+  "compliance": <0-10>,
+  "verdict": "compliant|borderline|violation",
+  "assessment": "Brief explanation of your compliance determination"
+}`;
+
+    try {
+      const text = await callAI(prompt, 1024);
+      const r = extractJson(text);
+      const newScore = clampScore(r.compliance);
+      // Take the higher score — give benefit of the doubt on re-check
+      const finalScore = Math.max(page.firstComplianceScore, newScore);
+      result.set(page.url, {
+        complianceScore: finalScore,
+        assessment: r.assessment ?? '',
+      });
+    } catch {
+      // On failure, keep the original score
+      result.set(page.url, {
+        complianceScore: page.firstComplianceScore,
+        assessment: 'Re-check failed, keeping original score',
+      });
+    }
+  }
+
+  return result;
 }
 
 async function analyzeOverall(
