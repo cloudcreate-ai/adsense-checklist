@@ -11,6 +11,8 @@ import { t, isValidLang, getSupportedLangs } from './i18n.js';
 import { BrowserManager, fetchPage } from './browser.js';
 import { detectSiteType } from './detector.js';
 import { analyzeSiteTopic } from './ai/topic.js';
+import { analyzeWithAI } from './ai/analyzer.js';
+import { computePageAiScore } from './scorer.js';
 import type { Lang, SiteType } from './types.js';
 
 function formatTimestamp(): string {
@@ -44,6 +46,7 @@ program
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
   .option('--type <type>', 'Force site type (content|tool|game), skip auto-detection')
   .option('--detect-only', 'Only detect site type/topic, skip full check')
+  .option('--page <url>', 'Analyze a single page value (AI four-dimension scoring)')
   .action(async (url: string, opts) => {
     try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
     if (!url.startsWith('http')) url = 'https://' + url;
@@ -91,6 +94,104 @@ program
         }
         await browser.close();
         process.exit(0);
+      } catch (err) {
+        await browser.close();
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(2);
+      }
+    }
+
+    // Single-page value analysis
+    if (opts.page) {
+      const pageUrl = opts.page.startsWith('http') ? opts.page : 'https://' + opts.page;
+      const apiKey = opts.apiKey || process.env.AI_API_KEY;
+      if (!apiKey) {
+        console.error(chalk.red('Error: --page requires AI (--ai --api-key or AI_API_KEY env)'));
+        process.exit(1);
+      }
+      const browser = new BrowserManager();
+      try {
+        process.stderr.write(chalk.cyan(`● Analyzing page value: ${pageUrl}\n`));
+        const pg = await browser.newPage();
+        const data = await fetchPage(pg, pageUrl, parseInt(opts.timeout, 10));
+        await pg.close();
+
+        // Auto-detect topic from this page
+        process.stderr.write(chalk.gray('  Detecting topic...\n'));
+        let siteTopic;
+        try {
+          siteTopic = await analyzeSiteTopic(
+            { title: data.title, text: data.text, navText: data.navText + ' ' + data.footerText },
+            lang, apiKey
+          );
+          process.stderr.write(chalk.gray(`  Topic: ${siteTopic.topic} (${siteTopic.type})\n`));
+        } catch {}
+
+        // AI four-dimension analysis
+        process.stderr.write(chalk.gray('  AI: analyzing page value...\n'));
+        const result = await analyzeWithAI(
+          [{ url: pageUrl, text: data.text }],
+          lang, apiKey, undefined, siteTopic
+        );
+        const analysis = result.pageAnalyses[0];
+
+        if (!analysis) {
+          console.error(chalk.red('  AI analysis returned no results'));
+          process.exit(2);
+        }
+
+        const score = computePageAiScore(analysis);
+        const v = analysis.valueScore ?? 5;
+        const o = analysis.originalityScore ?? 5;
+        const r = analysis.relevanceScore ?? 5;
+        const c = analysis.complianceScore ?? 5;
+
+        const dimColor = (s: number) => s >= 8 ? chalk.green : s >= 5 ? chalk.yellow : chalk.red;
+        const scoreColor = score >= 70 ? chalk.green : score >= 40 ? chalk.yellow : chalk.red;
+
+        const lines: string[] = [
+          '',
+          chalk.bold.cyan('  Page Value Analysis'),
+          chalk.gray(`  URL: ${pageUrl}`),
+          chalk.gray(`  Title: ${data.title}`),
+        ];
+        if (siteTopic) {
+          lines.push(chalk.gray(`  Site topic: ${siteTopic.topic} (${siteTopic.type})`));
+        }
+        lines.push('');
+        lines.push(`  ${dimColor(v)('Value')}        ${v}/10`);
+        lines.push(`  ${dimColor(o)('Originality')}  ${o}/10`);
+        lines.push(`  ${dimColor(r)('Relevance')}    ${r}/10`);
+        lines.push(`  ${dimColor(c)('Compliance')}   ${c}/10`);
+        lines.push('');
+        lines.push(chalk.bold(`  Overall: ${scoreColor(score + '/100')}`) + chalk.gray(' (geometric mean)'));
+        lines.push('');
+        if (analysis.assessment) {
+          lines.push(chalk.gray(`  ${analysis.assessment}`));
+          lines.push('');
+        }
+        for (const s of analysis.suggestions) {
+          lines.push(chalk.yellow(`  -> ${s}`));
+        }
+        lines.push('');
+
+        if (opts.json) {
+          console.log(JSON.stringify({
+            url: pageUrl,
+            title: data.title,
+            topic: siteTopic,
+            scores: { value: v, originality: o, relevance: r, compliance: c },
+            overall: score,
+            relevanceLabel: analysis.relevance,
+            assessment: analysis.assessment,
+            suggestions: analysis.suggestions,
+          }, null, 2));
+        } else {
+          console.log(lines.join('\n'));
+        }
+
+        await browser.close();
+        process.exit(c <= 2 ? 1 : 0); // exit 1 if serious compliance violation
       } catch (err) {
         await browser.close();
         console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));

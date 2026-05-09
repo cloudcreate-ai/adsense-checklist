@@ -1,5 +1,6 @@
 import type { PageType, CheckStatus, CheckCategory, CategoryScore, SiteType } from './types.js';
 import { PAGE_TYPE_WEIGHTS } from './classifier.js';
+import type { PageAiAnalysis } from './ai/analyzer.js';
 
 // ─── Per-page scoring ──────────────────────────────────────────────
 
@@ -65,6 +66,50 @@ export function scorePage(
   return { score, checks };
 }
 
+// ─── AI value scoring ──────────────────────────────────────────────
+
+// Page type weights for AI value (content pages matter most)
+const AI_PAGE_TYPE_WEIGHTS: Record<PageType, number> = {
+  content: 1.0,
+  game_detail: 1.0,
+  unknown: 0.5,
+  homepage: 0.3,
+  listing: 0.3,
+  required: 0.2,
+  utility: 0.1,
+};
+
+/**
+ * Compute per-page AI score using geometric mean of 4 dimensions (0-10 → 0-100).
+ * Geometric mean = (v × o × r × c) ^ (1/4) × 10
+ * Properties: any dimension at 0 → score 0; low dimension drags down heavily.
+ */
+export function computePageAiScore(analysis: PageAiAnalysis): number {
+  const v = analysis.valueScore ?? 5;
+  const o = analysis.originalityScore ?? 5;
+  const r = analysis.relevanceScore ?? 5;
+  const c = analysis.complianceScore ?? 5;
+  const geoMean = Math.pow(v * o * r * c, 0.25);
+  return Math.round(geoMean * 10);
+}
+
+/**
+ * Compute site-level AI score: weighted average of per-page scores by page type.
+ */
+export function computeSiteAiScore(
+  pageAiScores: Array<{ pageType: PageType; score: number }>
+): number {
+  if (pageAiScores.length === 0) return 0;
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const p of pageAiScores) {
+    const w = AI_PAGE_TYPE_WEIGHTS[p.pageType] ?? 0.5;
+    weightedSum += p.score * w;
+    totalWeight += w;
+  }
+  return totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
+}
+
 // ─── Site-level category scoring ───────────────────────────────────
 
 function statusToScore(status: CheckStatus): number {
@@ -81,14 +126,21 @@ export function scoreCategory(category: CheckCategory): CategoryScore {
   return { name: category.name, score: earned, maxScore: total };
 }
 
-// ─── Composite score: hard/soft two-group system ───────────────────
+function categoryPassRate(category: CheckCategory): number {
+  if (category.items.length === 0) return 100;
+  const cs = scoreCategory(category);
+  return cs.maxScore > 0 ? Math.round(cs.score / cs.maxScore * 100) : 100;
+}
 
-// Soft scoring weights (must sum to 1.0)
-const SOFT_WEIGHTS = {
-  pageQuality: 0.25,    // per-page scores (AI-adjusted)
-  aiAnalysis: 0.35,     // AI content analysis
-  contentQuality: 0.20, // mechanical content checks
-  userExperience: 0.20, // font, popup checks
+// ─── Composite score ───────────────────────────────────────────────
+
+// Soft category weights (must sum to 1.0)
+// AI value analysis: 45%, Content quality: 35%, User experience: 10%, Page quality: 10%
+const SOFT_CAT_WEIGHTS: Record<string, number> = {
+  aiValue: 0.45,
+  contentQuality: 0.35,
+  userExperience: 0.10,
+  pageQuality: 0.10,
 };
 
 // Composite: hard * 0.4 + soft * 0.6
@@ -102,12 +154,14 @@ export interface CompositeResult {
   softScore: number;
   warningRatio: number;
   warningPenalty: number;
+  siteAiScore: number;
 }
 
 export function computeCompositeScore(
   pageScores: Array<{ pageType: PageType; score: number }>,
   hardCategories: CheckCategory[],
-  softCategories: CheckCategory[]
+  softCategories: CheckCategory[],
+  aiAnalyses?: PageAiAnalysis[]
 ): CompositeResult {
   // 1. Hard pass rate
   const hardItems = hardCategories.flatMap(c => c.items);
@@ -117,65 +171,57 @@ export function computeCompositeScore(
   const hardTotal = hardItems.length;
   const hardPassRate = hardTotal > 0 ? (hardPass / hardTotal) * 100 : 100;
 
-  // Hard status
   let hardStatus: 'ready' | 'warn' | 'fail' = 'ready';
   if (hardFail > 0) hardStatus = 'fail';
   else if (hardWarn > 0) hardStatus = 'warn';
 
-  // 2. Soft scoring components
-  // 2a. Page quality: score pages penalized by AI issues ratio
-  const allPages = pageScores.length;
-  const ai = softCategories.find(c => c.name.includes('AI') || c.name.includes('ai'));
-  // Count pages with AI issues from the AI category detail (passed via soft categories)
-  // Instead, use a simpler approach: if AI category has warnings/fails, reduce page quality
-  let pageQuality: number;
-  if (allPages > 0) {
-    const avgPageScore = pageScores.reduce((s, p) => s + p.score, 0) / allPages;
-    pageQuality = avgPageScore;
-  } else {
-    pageQuality = 100;
+  // 2. AI value score (geometric mean, page-type weighted)
+  // pageScores and aiAnalyses are in the same order (both from uniquePages)
+  let siteAiScore = 0;
+  if (aiAnalyses && aiAnalyses.length > 0) {
+    siteAiScore = computeSiteAiScore(
+      aiAnalyses.map((a, i) => ({
+        pageType: pageScores[i]?.pageType ?? 'unknown',
+        score: computePageAiScore(a),
+      }))
+    );
   }
 
-  // 2b. AI analysis score
-  let aiScore = 100;
-  if (ai && ai.items.length > 0) {
-    aiScore = ai.items.reduce((sum, item) => sum + statusToScore(item.status), 0) / ai.items.length;
-  }
+  // 3. Soft scoring: use displayed category pass rates + AI score
+  // Find AI value category
+  const aiCat = softCategories.find(c => c.name.includes('AI') || c.name.includes('ai'));
+  const contentCat = softCategories.find(c => c.name.includes('内容质量') || c.name.includes('Content'));
+  const uxCat = softCategories.find(c => c.name.includes('体验') || c.name.includes('UX') || c.name.includes('User'));
 
-  // 2c. Content quality score (other soft categories excluding AI)
-  const contentCats = softCategories.filter(c => c !== ai);
-  let contentScore = 100;
-  if (contentCats.length > 0) {
-    let totalEarned = 0;
-    let totalItems = 0;
-    for (const cat of contentCats) {
-      for (const item of cat.items) {
-        totalEarned += statusToScore(item.status);
-        totalItems++;
-      }
-    }
-    contentScore = totalItems > 0 ? totalEarned / totalItems : 100;
-  }
+  // AI value score: use computed siteAiScore (0-100)
+  const aiValue = siteAiScore > 0 ? siteAiScore : (aiCat ? categoryPassRate(aiCat) : 100);
 
-  // 2d. UX score (extracted from contentCats if present)
-  let uxScore = 100;
+  // Content quality: pass rate of content quality category items
+  const contentQuality = contentCat ? categoryPassRate(contentCat) : 100;
 
-  // Weighted soft score
+  // User experience: pass rate of UX category items
+  const userExperience = uxCat ? categoryPassRate(uxCat) : 100;
+
+  // Page quality: average of per-page mechanical scores
+  const pageQuality = pageScores.length > 0
+    ? Math.round(pageScores.reduce((s, p) => s + p.score, 0) / pageScores.length)
+    : 100;
+
   const softScore = Math.round(
-    pageQuality * SOFT_WEIGHTS.pageQuality +
-    aiScore * SOFT_WEIGHTS.aiAnalysis +
-    contentScore * SOFT_WEIGHTS.contentQuality +
-    uxScore * SOFT_WEIGHTS.userExperience
+    aiValue * SOFT_CAT_WEIGHTS.aiValue +
+    contentQuality * SOFT_CAT_WEIGHTS.contentQuality +
+    userExperience * SOFT_CAT_WEIGHTS.userExperience +
+    pageQuality * SOFT_CAT_WEIGHTS.pageQuality
   );
 
-  // 3. Warning penalty (multiplicative)
+  // 4. Warning penalty
   const allItems = [...hardItems, ...softCategories.flatMap(c => c.items)];
   const totalWarn = allItems.filter(i => i.status === 'warn').length;
   const totalAll = allItems.length;
   const warningRatio = totalAll > 0 ? totalWarn / totalAll : 0;
   const warningPenalty = warningRatio > 0.15 ? Math.round((warningRatio - 0.15) * 100) : 0;
 
-  // 4. Composite
+  // 5. Composite
   const base = hardPassRate * HARD_COMPOSITE_WEIGHT + softScore * SOFT_COMPOSITE_WEIGHT;
   const compositeScore = Math.min(100, Math.max(0, Math.round(base - warningPenalty)));
 
@@ -185,5 +231,5 @@ export function computeCompositeScore(
     categoryScores.push(scoreCategory(cat));
   }
 
-  return { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty };
+  return { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore };
 }

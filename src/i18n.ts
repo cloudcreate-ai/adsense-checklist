@@ -41,6 +41,9 @@ const en: Record<string, string> = {
   'item.ai.originality': 'Originality',
   'item.ai.compliance': 'Compliance',
   'item.ai.suggestions': 'AI Suggestions',
+  'item.ai.compliance_serious': 'Serious Violations',
+  'item.ai.compliance_suspicious': 'Suspicious Content',
+  'item.ai.compliance_ok': 'AI Compliance',
 
   // Required page names
   'page.about': 'About',
@@ -123,6 +126,9 @@ const en: Record<string, string> = {
   'ai.fail': 'AI analysis failed: {error}',
   'ai.suggestion_count': '{count} suggestion(s)',
   'ai.suggest_enable': 'Tip: use --ai flag to enable AI content quality analysis for deeper insights',
+  'ai.compliance_serious': '{count} page(s) with serious policy violations detected',
+  'ai.compliance_suspicious': '{count}/{total} pages with potentially non-compliant content',
+  'ai.compliance_ok': 'No compliance issues detected by AI',
 
   // Reporter
   'report.title': 'AdSense Checklist Report',
@@ -153,10 +159,11 @@ const en: Record<string, string> = {
   'group.policy': 'Policy Compliance',
   'group.site_scale': 'Site Scale',
   'group.content_quality': 'Content Quality',
+  'group.ai_value': 'AI Value Analysis',
   'group.ai_analysis': 'AI Content Analysis',
   'group.page_quality': 'Page Quality',
   'group.user_experience': 'User Experience',
-  'group.content_relevance': 'Content Relevance',
+  'group.policy_compliance': 'Policy Compliance',
 
   // Topic & relevance
   'item.relevance.topic': 'Topic Relevance',
@@ -208,6 +215,9 @@ const zh: Record<string, string> = {
   'item.ai.originality': '原创性评估',
   'item.ai.compliance': '合规性评估',
   'item.ai.suggestions': 'AI 建议',
+  'item.ai.compliance_serious': '严重违规',
+  'item.ai.compliance_suspicious': '可疑内容',
+  'item.ai.compliance_ok': 'AI 合规',
 
   // 必要页面名称
   'page.about': 'About',
@@ -290,6 +300,9 @@ const zh: Record<string, string> = {
   'ai.fail': 'AI 分析失败: {error}',
   'ai.suggestion_count': '{count} 条改进建议',
   'ai.suggest_enable': '提示: 使用 --ai 参数启用 AI 内容质量分析，获取更深入的审查建议',
+  'ai.compliance_serious': '检测到 {count} 个页面存在严重违规内容',
+  'ai.compliance_suspicious': '{count}/{total} 个页面存在可疑不合规内容',
+  'ai.compliance_ok': 'AI 未检测到合规问题',
 
   // 报告
   'report.title': 'AdSense 审核检查报告',
@@ -320,10 +333,11 @@ const zh: Record<string, string> = {
   'group.policy': '政策合规',
   'group.site_scale': '站点规模',
   'group.content_quality': '内容质量',
+  'group.ai_value': 'AI 价值分析',
   'group.ai_analysis': 'AI 内容分析',
   'group.page_quality': '页面质量',
   'group.user_experience': '用户体验',
-  'group.content_relevance': '内容相关性',
+  'group.policy_compliance': '政策合规',
 
   // 主题和相关性
   'item.relevance.topic': '主题相关性',

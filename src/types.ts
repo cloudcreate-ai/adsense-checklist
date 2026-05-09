@@ -80,6 +80,7 @@ export interface CheckReport {
   softScore: number;               // 0-100 soft scoring result
   warningRatio: number;            // 0-1
   warningPenalty: number;          // points deducted
+  siteAiScore: number;             // 0-100 AI value score (geometric mean, page-type weighted)
 }
 
 export interface CheckOptions {

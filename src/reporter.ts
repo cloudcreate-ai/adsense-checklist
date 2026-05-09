@@ -98,7 +98,8 @@ export function renderTerminalReport(report: CheckReport): string {
   // ── Soft Scoring ──
   lines.push(chalk.bold(`  ┌─ ${t('report.soft_scoring', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.soft_scoring', lang).length))) + ` ${scoreColor(report.softScore + '/100')}`);
   for (const cat of report.softCategories) {
-    const score = categoryScore(cat);
+    const isAiCat = cat.name.includes('AI') || cat.name.includes('ai');
+    const score = isAiCat && report.siteAiScore > 0 ? report.siteAiScore : categoryScore(cat);
     const bar = renderBar(score, 100);
     const pct = `${score}%`;
     lines.push(`  │  ${bar} ${pct.padStart(4)}  ${cat.name}`);
@@ -113,14 +114,20 @@ export function renderTerminalReport(report: CheckReport): string {
   const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
   const softContrib = Math.round(report.softScore * 0.6);
   lines.push(chalk.gray(`  │  Hard ${Math.round(hardContrib)}% × 0.4 + Soft ${report.softScore}% × 0.6 - Penalty ${report.warningPenalty} = ${report.compositeScore}`));
+  if (report.siteAiScore > 0) {
+    lines.push(chalk.gray(`  │  AI Value Score: ${report.siteAiScore}/100 (geometric mean × page-type weights)`));
+  }
   lines.push(chalk.gray(`  └─`));
   lines.push('');
 
   // Category score breakdown (bars)
   if (report.categoryScores.length > 0) {
     for (const cs of report.categoryScores) {
-      const bar = renderBar(cs.score, cs.maxScore);
-      const pct = cs.maxScore > 0 ? Math.round((cs.score / cs.maxScore) * 100) : 0;
+      const isAiCat = cs.name.includes('AI') || cs.name.includes('ai');
+      const pct = isAiCat && report.siteAiScore > 0
+        ? report.siteAiScore
+        : (cs.maxScore > 0 ? Math.round((cs.score / cs.maxScore) * 100) : 0);
+      const bar = renderBar(pct, 100);
       lines.push(`    ${bar} ${pct}%  ${cs.name}`);
     }
     lines.push('');
@@ -164,7 +171,7 @@ export function renderTerminalReport(report: CheckReport): string {
   }
 
   // AI suggestion when AI is not enabled
-  const hasAi = report.categories.some(c => c.group === 'soft' && c.name.includes('AI'));
+  const hasAi = report.categories.some(c => c.group === 'soft' && (c.name.includes('AI') || c.name.includes('ai')));
   if (!hasAi) {
     lines.push('');
     lines.push(chalk.cyan(`  💡 ${t('ai.suggest_enable', lang)}`));

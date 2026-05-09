@@ -316,56 +316,64 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const policyCat = checkPolicyCompliance(uniquePages, lang);
     allCategories.push({ ...policyCat, group: 'hard' });
 
-    // AI → soft
+    // AI → soft (value analysis with four-dimension scoring)
     let pageAnalyses: PageAiAnalysis[] = [];
     if (!skipAi) {
       try {
         progress(`AI analysis: ${uniquePages.length} pages...`);
         const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic);
         pageAnalyses = aiResult.pageAnalyses;
-        const aiItems: CheckItem[] = [
-          { name: t('item.ai.quality', lang), status: aiResult.contentQuality.status, message: aiResult.contentQuality.detail.slice(0, 200) },
-          { name: t('item.ai.originality', lang), status: aiResult.originality.status, message: aiResult.originality.detail.slice(0, 200) },
-          { name: t('item.ai.compliance', lang), status: aiResult.compliance.status, message: aiResult.compliance.detail.slice(0, 200) },
-        ];
+
+        // AI value analysis category (displayed in report)
+        const aiItems: CheckItem[] = [];
         if (aiResult.suggestions.length > 0) {
           aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detail: aiResult.suggestions.join('; ') });
         }
-        allCategories.push({ name: t('group.ai_analysis', lang), items: aiItems, group: 'soft' });
+        allCategories.push({ name: t('group.ai_value', lang), items: aiItems, group: 'soft' });
+
+        // Compliance hard check: flag pages with serious violations
+        const seriousViolations = pageAnalyses.filter(a => (a.complianceScore ?? 5) <= 2);
+        const suspiciousPages = pageAnalyses.filter(a => {
+          const c = a.complianceScore ?? 5;
+          return c > 2 && c <= 5;
+        });
+        const complianceItems: CheckItem[] = [];
+        if (seriousViolations.length > 0) {
+          complianceItems.push({
+            name: t('item.ai.compliance_serious', lang),
+            status: 'fail',
+            message: t('ai.compliance_serious', lang, { count: seriousViolations.length }),
+            detail: seriousViolations.map(a => new URL(a.url).pathname).join('; '),
+          });
+        } else if (suspiciousPages.length > pageAnalyses.length * 0.2) {
+          complianceItems.push({
+            name: t('item.ai.compliance_suspicious', lang),
+            status: 'warn',
+            message: t('ai.compliance_suspicious', lang, { count: suspiciousPages.length, total: pageAnalyses.length }),
+          });
+        } else {
+          complianceItems.push({
+            name: t('item.ai.compliance_ok', lang),
+            status: 'pass',
+            message: t('ai.compliance_ok', lang),
+          });
+        }
+        allCategories.push({ name: t('group.policy_compliance', lang), items: complianceItems, group: 'hard' });
       } catch (err) {
-        allCategories.push({ name: t('group.ai_analysis', lang), items: [{ name: 'AI', status: 'skip', message: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) }], group: 'soft' });
+        allCategories.push({ name: t('group.ai_value', lang), items: [{ name: 'AI', status: 'skip', message: t('ai.fail', lang, { error: err instanceof Error ? err.message : String(err) }) }], group: 'soft' });
       }
     }
 
     const pageDetails = buildPageDetails(uniquePages, pageAnalyses, siteType);
-
-    // Content relevance check (based on AI per-page relevance)
-    if (pageAnalyses.length > 0) {
-      const withRelevance = pageAnalyses.filter(a => a.relevance);
-      if (withRelevance.length > 0) {
-        const offTopic = withRelevance.filter(a => a.relevance === 'off-topic').length;
-        const tangential = withRelevance.filter(a => a.relevance === 'tangential').length;
-        const offTopicRatio = offTopic / withRelevance.length;
-        const relevanceStatus = offTopicRatio > 0.3 ? 'fail' : offTopicRatio > 0.1 ? 'warn' : 'pass';
-        const msg = offTopic > 0 || tangential > 0
-          ? `${offTopic} off-topic, ${tangential} tangential out of ${withRelevance.length} pages`
-          : `All ${withRelevance.length} pages relevant to site topic`;
-        allCategories.push({
-          name: t('group.content_relevance', lang),
-          items: [{ name: t('item.relevance.topic', lang), status: relevanceStatus, message: msg }],
-          group: 'soft',
-        });
-      }
-    }
 
     // Separate hard/soft categories
     const hardCategories = allCategories.filter(c => c.group === 'hard');
     const softCategories = allCategories.filter(c => c.group === 'soft');
     const allItems = allCategories.flatMap(c => c.items);
 
-    // Compute composite score with new two-group system
+    // Compute composite score with AI value scoring
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
-    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories);
+    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses);
 
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
@@ -388,6 +396,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       softScore,
       warningRatio,
       warningPenalty,
+      siteAiScore,
     };
   } finally {
     await browser.close();
