@@ -8,6 +8,7 @@ export interface CheckItem {
   status: CheckStatus;
   message: string;
   detail?: string;
+  detailList?: string[];
 }
 
 export type CheckGroup = 'hard' | 'soft';

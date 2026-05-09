@@ -151,6 +151,9 @@ export function renderTerminalReport(report: CheckReport): string {
     for (const item of cat.items) {
       lines.push(`    ${ICONS[item.status]} [${LABELS[item.status]}] ${item.message}`);
       if (item.detail) lines.push(chalk.gray(`         ${item.detail}`));
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(chalk.gray(`       • ${d}`));
+      }
     }
     lines.push('');
   }

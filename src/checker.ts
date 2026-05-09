@@ -354,7 +354,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         // AI value analysis category (displayed in report)
         const aiItems: CheckItem[] = [];
         if (aiResult.suggestions.length > 0) {
-          aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detail: aiResult.suggestions.join('; ') });
+          aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detailList: aiResult.suggestions });
         }
         allCategories.push({ name: t('group.ai_value', lang), items: aiItems, group: 'soft' });
 
