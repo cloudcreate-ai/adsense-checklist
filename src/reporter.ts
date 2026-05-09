@@ -218,7 +218,13 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   const ratioColor = page.contentRatio >= 50 ? chalk.green : page.contentRatio >= 30 ? chalk.yellow : chalk.red;
   const scoreColor = page.score >= 80 ? chalk.green : page.score >= 50 ? chalk.yellow : chalk.red;
   const typeIcon = PAGE_TYPE_ICONS[page.pageType] || chalk.gray('?');
-  lines.push(`    ${ICONS[page.contentStatus]} ${typeIcon} ${chalk.bold(path)} ${scoreColor(page.score + '/100')}`);
+  const aiComposite = (page.ai?.valueScore != null && page.ai?.originalityScore != null && page.ai?.relevanceScore != null && page.ai?.complianceScore != null)
+    ? Math.round(Math.pow(page.ai.valueScore * page.ai.originalityScore * page.ai.relevanceScore * page.ai.complianceScore, 0.25) * 10)
+    : null;
+  const scoreLabels = aiComposite != null
+    ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${t('reporter.advanced_label', lang)}: ${aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red}(AI ${aiComposite}/100)`
+    : `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')}`;
+  lines.push(`    ${ICONS[page.contentStatus]} ${typeIcon} ${chalk.bold(path)} ${scoreLabels}`);
   lines.push(chalk.gray(`       ${page.title}`));
   lines.push(`       ${t('report.content_label', lang)} ${ratioColor(page.contentRatio + '%')} (${page.contentChars}/${page.totalChars})`);
   for (const issue of page.issues) lines.push(chalk.yellow(`       ! ${issue}`));
@@ -363,7 +369,13 @@ export function renderMarkdownReport(report: CheckReport): string {
       lines.push('');
       for (const p of detailPages) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-        lines.push(`**[${path}](${p.url})** (${t('reporter.mechanical_label', lang)}: ${p.score}/100)`);
+        const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
+          ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
+          : null;
+        const scoreLabels = aiComposite != null
+          ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: ${aiComposite}/100`
+          : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
+        lines.push(`**[${path}](${p.url})** (${scoreLabels})`);
         lines.push('');
         for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
         if (p.ai) {
