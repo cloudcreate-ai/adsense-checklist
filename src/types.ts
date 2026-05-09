@@ -31,6 +31,10 @@ export interface PageDetail {
   relevance?: 'relevant' | 'tangential' | 'off-topic';
   ai?: {
     status: CheckStatus;
+    valueScore?: number;
+    originalityScore?: number;
+    relevanceScore?: number;
+    complianceScore?: number;
     assessment: string;
     suggestions: string[];
   };

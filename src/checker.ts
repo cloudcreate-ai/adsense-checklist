@@ -46,7 +46,15 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
     if (relevance) detail.relevance = relevance;
-    if (ai) detail.ai = { status: ai.status, assessment: ai.assessment, suggestions: ai.suggestions };
+    if (ai) detail.ai = {
+      status: ai.status,
+      valueScore: ai.valueScore,
+      originalityScore: ai.originalityScore,
+      relevanceScore: ai.relevanceScore,
+      complianceScore: ai.complianceScore,
+      assessment: ai.assessment,
+      suggestions: ai.suggestions,
+    };
     return detail;
   });
 }

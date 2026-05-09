@@ -320,14 +320,18 @@ export function renderMarkdownReport(report: CheckReport): string {
     const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
 
     // Table header
-    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | 标题 |`);
-    lines.push(`|------|------|------|------|--------|------|`);
+    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | V | O | R | C | 标题 |`);
+    lines.push(`|------|------|------|------|--------|---|---|---|---|------|`);
 
     for (const p of [...problems, ...ok]) {
       const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
       const status = MD_ICONS[p.contentStatus];
-      const scoreColor = p.score >= 80 ? '' : p.score >= 50 ? '' : '';
-      lines.push(`| ${status} | ${p.pageType} | \`${path}\` | ${p.score}/100 | ${p.contentRatio}% | ${p.title} |`);
+      const ai = p.ai;
+      const v = ai?.valueScore != null ? ai.valueScore : '-';
+      const o = ai?.originalityScore != null ? ai.originalityScore : '-';
+      const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
+      const c = ai?.complianceScore != null ? ai.complianceScore : '-';
+      lines.push(`| ${status} | ${p.pageType} | \`${path}\` | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${p.title} |`);
     }
     lines.push('');
 
@@ -338,11 +342,22 @@ export function renderMarkdownReport(report: CheckReport): string {
       lines.push('');
       for (const p of detailPages) {
         const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
-        lines.push(`**${path}** (${p.score}/100)`);
+        lines.push(`**${path}** (mechanical: ${p.score}/100)`);
+        lines.push('');
         for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
         if (p.ai) {
-          lines.push(`- ${MD_ICONS[p.ai.status]} AI: ${p.ai.assessment}`);
-          for (const s of p.ai.suggestions.slice(0, 3)) lines.push(`  - -> ${s}`);
+          const ai = p.ai;
+          lines.push(`- AI 状态: ${MD_ICONS[ai.status]} ${ai.status}`);
+          if (ai.valueScore != null) {
+            lines.push(`- 四维评分: **Value ${ai.valueScore}** | **Originality ${ai.originalityScore}** | **Relevance ${ai.relevanceScore}** | **Compliance ${ai.complianceScore}**`);
+            const geoMean = Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
+            lines.push(`- AI 综合分: ${geoMean}/100（几何均值）`);
+          }
+          lines.push(`- 评估: ${ai.assessment}`);
+          if (ai.suggestions.length > 0) {
+            lines.push(`- 改进建议:`);
+            for (const s of ai.suggestions.slice(0, 3)) lines.push(`  - ${s}`);
+          }
         }
         lines.push('');
       }
