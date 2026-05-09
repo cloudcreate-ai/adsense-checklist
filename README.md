@@ -103,6 +103,14 @@ Page score = geometric mean of all four dimensions. This means any weak dimensio
 
 Site score = page-type weighted average across all analyzed pages (homepage and content pages have highest weight).
 
+### AI Page Classification
+
+With `--ai`, each page is classified by content analysis into one of: homepage, listing, content, game_detail, video_detail, reference_detail, required, utility. This overrides URL-based classification for sites with non-standard URL patterns.
+
+### Compliance Re-check
+
+Pages flagged with borderline compliance scores (3-5) receive a second-pass AI review to reduce false positives. Context-aware: informational/educational mentions of sensitive topics are not treated as violations.
+
 ### Single-Page Analysis
 
 ```bash

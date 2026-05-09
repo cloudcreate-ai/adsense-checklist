@@ -69,8 +69,11 @@
 | 违规关键词 | 机械 | 扫描页面是否包含违规关键词 | 无匹配 |
 | AI 严重违规 | AI | AI 检测严重违规内容（compliance ≤ 2） | 无严重违规页面 |
 | AI 可疑内容 | AI | AI 检测可疑不合规内容 | ≤ 20% 的页面 |
+| AI 合规复检 | AI | 对 borderline 分数(3-5)的页面进行二次审核 | 复检后无严重违规 |
 
 违规关键词黑名单（中英文）：色情、赌博、盗版、毒品、暴力类。
+
+AI 合规复检会考虑上下文：教育/新闻/信息性质的敏感话题（如"puzzle crack"新闻、"betting odds"体育分析）不算违规；但 AI 会参考站外知识判断内容风险（如 Jenny Mod 社区的成人内容关联）。
 
 ---
 
@@ -154,7 +157,7 @@ siteAiScore = Σ(pageAiScore × typeWeight) / Σ(typeWeight)
 | reference_listing | 0.1 | 参考站列表页 |
 | utility | 0.1 | 功能性页面 |
 
-页面类型由 URL 路径自动判定（见 `classifier.ts`）。
+页面类型由 URL 路径自动判定（见 `classifier.ts`）。开启 `--ai` 后，AI 会基于内容推断页面类型，覆盖 URL 路径分类。AI 支持的类型：homepage、listing、content、game_detail、video_detail、reference_detail、required、utility。
 
 #### 单页分析
 
