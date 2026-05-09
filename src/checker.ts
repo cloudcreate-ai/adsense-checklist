@@ -221,7 +221,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         if (seenInDiscovery.has(norm)) continue;
         seenInDiscovery.add(norm);
         const pt = classifyPage(child);
-        if (pt === 'listing' || pt === 'unknown') {
+        if (pt === 'listing') {
           // Listing pages: will need to crawl to find their children, queue for deeper discovery
           if (current.depth < MAX_DISCOVERY_DEPTH) {
             // We'll discover their links when we crawl them in Phase 2
@@ -237,7 +237,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       const norm = smUrl.replace(/\/+$/, '');
       if (!crawledUrls.has(norm) && !discoveredContent.has(norm)) {
         const pt = classifyPage(smUrl);
-        if (pt !== 'listing' && pt !== 'unknown') {
+        if (pt !== 'listing') {
           discoveredContent.add(smUrl);
         }
       }
@@ -260,7 +260,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         const deeperChildren = discoverChildLinks(link, crawledPage.links, origin, CHILDREN_PER_LISTING);
         for (const dc of deeperChildren) {
           const dnorm = dc.replace(/\/+$/, '');
-          if (!crawledUrls.has(dnorm) && !discoveredContent.has(dnorm) && classifyPage(dc) !== 'listing' && classifyPage(dc) !== 'unknown') {
+          if (!crawledUrls.has(dnorm) && !discoveredContent.has(dnorm) && classifyPage(dc) !== 'listing') {
             // Found deeper content page, add to queue if we have room
             if (i + discoveredContent.size < maxContent * 2) {
               discoveredContent.add(dc);
