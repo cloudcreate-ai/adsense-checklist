@@ -224,8 +224,10 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   const aiComposite = (page.ai?.valueScore != null && page.ai?.originalityScore != null && page.ai?.relevanceScore != null && page.ai?.complianceScore != null)
     ? Math.round(Math.pow(page.ai.valueScore * page.ai.originalityScore * page.ai.relevanceScore * page.ai.complianceScore, 0.25) * 10)
     : null;
+  const aiColor = aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red;
+  const aiScoreText = aiColor(`AI ${aiComposite}/100`);
   const scoreLabels = aiComposite != null
-    ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${t('reporter.advanced_label', lang)}: ${aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red}(AI ${aiComposite}/100)`
+    ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${t('reporter.advanced_label', lang)}: ${aiScoreText}`
     : `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')}`;
   lines.push(`    ${ICONS[page.contentStatus]} ${typeIcon} ${chalk.bold(path)} ${scoreLabels}`);
   lines.push(chalk.gray(`       ${page.title}`));
