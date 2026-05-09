@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { check } from './checker.js';
-import { renderTerminalReport, renderJsonReport } from './reporter.js';
+import { renderTerminalReport, renderJsonReport, renderMarkdownReport } from './reporter.js';
 import { t, isValidLang, getSupportedLangs } from './i18n.js';
 import { BrowserManager, fetchPage } from './browser.js';
 import { detectSiteType } from './detector.js';
@@ -234,9 +234,12 @@ program
         const outDir = join(process.cwd(), opts.output);
         try {
           mkdirSync(outDir, { recursive: true });
-          const path = join(outDir, `${domain}-${ts}.json`);
-          writeFileSync(path, renderJsonReport(report), 'utf-8');
-          console.log(chalk.gray(`  ${t('report.saved', lang)}: ${path}`));
+          const jsonPath = join(outDir, `${domain}-${ts}.json`);
+          writeFileSync(jsonPath, renderJsonReport(report), 'utf-8');
+          const mdPath = join(outDir, `${domain}-${ts}.md`);
+          writeFileSync(mdPath, renderMarkdownReport(report), 'utf-8');
+          console.log(chalk.gray(`  ${t('report.saved', lang)}: ${jsonPath}`));
+          console.log(chalk.gray(`  ${t('report.saved', lang)}: ${mdPath}`));
         } catch {}
       }
 

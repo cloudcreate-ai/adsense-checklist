@@ -225,3 +225,141 @@ function truncate(s: string, max: number): string {
 export function renderJsonReport(report: CheckReport): string {
   return JSON.stringify(report, null, 2);
 }
+
+// ─── Markdown report ───────────────────────────────────────────────
+
+const MD_ICONS: Record<CheckStatus, string> = {
+  pass: '✅',
+  warn: '⚠️',
+  fail: '❌',
+  skip: '⏭️',
+};
+
+export function renderMarkdownReport(report: CheckReport): string {
+  const lines: string[] = [];
+  const lang = report.lang;
+  const typeKey = `detector.type.${report.siteType}`;
+  const typeLabel = t(typeKey, lang);
+
+  lines.push(`# AdSense 审核报告`);
+  lines.push('');
+  lines.push(`| 项目 | 值 |`);
+  lines.push(`|------|-----|`);
+  lines.push(`| URL | ${report.url} |`);
+  lines.push(`| 时间 | ${report.timestamp} |`);
+  lines.push(`| 站点类型 | ${typeLabel} (${report.siteTypeConfidence}) |`);
+  if (report.siteTopic) {
+    lines.push(`| 主题 | ${report.siteTopic.topic} |`);
+    lines.push(`| 描述 | ${report.siteTopic.description} |`);
+  }
+  if (report.samplingInfo) {
+    const s = report.samplingInfo;
+    lines.push(`| 抽样 | ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%, ${s.confidence}) |`);
+  }
+  lines.push('');
+
+  // Composite score
+  lines.push(`## 综合评分: ${report.compositeScore}/100`);
+  lines.push('');
+
+  // Hard requirements
+  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
+  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
+  const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';
+  lines.push(`### 硬性要求 ${hardLabel}`);
+  lines.push('');
+  for (const cat of report.hardCategories) {
+    for (const item of cat.items) {
+      lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
+      if (item.detail) lines.push(`  - ${item.detail}`);
+    }
+  }
+  lines.push('');
+
+  // Soft scoring
+  lines.push(`### 柔性评分 ${report.softScore}/100`);
+  lines.push('');
+  for (const cat of report.softCategories) {
+    const isAiCat = cat.name.includes('AI') || cat.name.includes('ai');
+    const score = isAiCat && report.siteAiScore > 0 ? report.siteAiScore : categoryScore(cat);
+    lines.push(`- **${cat.name}**: ${score}%`);
+    for (const item of cat.items) {
+      lines.push(`  - ${MD_ICONS[item.status]} ${item.name}: ${item.message}`);
+      if (item.detail) lines.push(`    - ${item.detail}`);
+    }
+  }
+  lines.push('');
+
+  // AI value breakdown
+  if (report.aiDimensionAverages) {
+    const d = report.aiDimensionAverages;
+    lines.push(`### AI 价值分析`);
+    lines.push('');
+    lines.push(`| 维度 | 均分 |`);
+    lines.push(`|------|------|`);
+    lines.push(`| Value（价值） | ${d.value}/10 |`);
+    lines.push(`| Originality（原创） | ${d.originality}/10 |`);
+    lines.push(`| Relevance（相关） | ${d.relevance}/10 |`);
+    lines.push(`| Compliance（合规） | ${d.compliance}/10 |`);
+    lines.push('');
+    lines.push(`**站点 AI 评分**: ${report.siteAiScore}/100（几何均值 × 页面类型加权）`);
+    lines.push('');
+  }
+
+  // Composite formula
+  const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
+  lines.push(`> Hard ${Math.round(hardContrib)}% × 0.4 + Soft ${report.softScore}% × 0.6 - Penalty ${report.warningPenalty} = ${report.compositeScore}`);
+  lines.push('');
+
+  // Page details
+  if (report.pages.length > 0) {
+    lines.push(`### 逐页详情 (${report.pages.length} pages)`);
+    lines.push('');
+
+    const problems = report.pages.filter(p => p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
+    const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
+
+    // Table header
+    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | 标题 |`);
+    lines.push(`|------|------|------|------|--------|------|`);
+
+    for (const p of [...problems, ...ok]) {
+      const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
+      const status = MD_ICONS[p.contentStatus];
+      const scoreColor = p.score >= 80 ? '' : p.score >= 50 ? '' : '';
+      lines.push(`| ${status} | ${p.pageType} | \`${path}\` | ${p.score}/100 | ${p.contentRatio}% | ${p.title} |`);
+    }
+    lines.push('');
+
+    // Detailed issues for problem pages
+    const detailPages = problems.filter(p => p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
+    if (detailPages.length > 0) {
+      lines.push(`#### 问题页面详情`);
+      lines.push('');
+      for (const p of detailPages) {
+        const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
+        lines.push(`**${path}** (${p.score}/100)`);
+        for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
+        if (p.ai) {
+          lines.push(`- ${MD_ICONS[p.ai.status]} AI: ${p.ai.assessment}`);
+          for (const s of p.ai.suggestions.slice(0, 3)) lines.push(`  - -> ${s}`);
+        }
+        lines.push('');
+      }
+    }
+  }
+
+  // Summary
+  if (report.hardStatus === 'fail') {
+    lines.push(`**❌ NOT READY** — ${hardFailCount} 项失败需要修复`);
+  } else if (report.hardStatus === 'warn') {
+    lines.push(`**⚠️ NEEDS FIXES** — ${hardWarnCount} 项警告待修复`);
+  } else if (report.warned > 0) {
+    lines.push(`**⚠️ MOSTLY READY** — 修复 ${report.warned} 项警告后可提交`);
+  } else {
+    lines.push(`**✅ READY** — 可以提交 AdSense 审核`);
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
