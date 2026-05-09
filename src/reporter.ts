@@ -117,6 +117,17 @@ export function renderTerminalReport(report: CheckReport): string {
   if (report.siteAiScore > 0) {
     lines.push(chalk.gray(`  │  AI Value Score: ${report.siteAiScore}/100 (geometric mean × page-type weights)`));
   }
+  if (report.aiDimensionAverages) {
+    const d = report.aiDimensionAverages;
+    const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
+    lines.push(chalk.gray(`  │  AI Dimensions: `) +
+      `${dimColor(d.value)('Value ' + d.value)} ` +
+      `${dimColor(d.originality)('Originality ' + d.originality)} ` +
+      `${dimColor(d.relevance)('Relevance ' + d.relevance)} ` +
+      `${dimColor(d.compliance)('Compliance ' + d.compliance)} ` +
+      chalk.gray('(avg /10)')
+    );
+  }
   lines.push(chalk.gray(`  └─`));
   lines.push('');
 

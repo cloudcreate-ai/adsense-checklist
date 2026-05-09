@@ -375,6 +375,14 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
     const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses);
 
+    // Per-dimension averages
+    const aiDimensionAverages = pageAnalyses.length > 0 ? {
+      value: Math.round(pageAnalyses.reduce((s, a) => s + (a.valueScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
+      originality: Math.round(pageAnalyses.reduce((s, a) => s + (a.originalityScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
+      relevance: Math.round(pageAnalyses.reduce((s, a) => s + (a.relevanceScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
+      compliance: Math.round(pageAnalyses.reduce((s, a) => s + (a.complianceScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
+    } : undefined;
+
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence,
@@ -397,6 +405,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       warningRatio,
       warningPenalty,
       siteAiScore,
+      aiDimensionAverages,
     };
   } finally {
     await browser.close();

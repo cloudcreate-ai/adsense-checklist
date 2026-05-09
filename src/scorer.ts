@@ -70,11 +70,11 @@ export function scorePage(
 
 // Page type weights for AI value (content pages matter most)
 const AI_PAGE_TYPE_WEIGHTS: Record<PageType, number> = {
+  homepage: 1.5,
   content: 1.0,
   game_detail: 1.0,
   unknown: 0.5,
-  homepage: 0.3,
-  listing: 0.3,
+  listing: 0.1,
   required: 0.2,
   utility: 0.1,
 };

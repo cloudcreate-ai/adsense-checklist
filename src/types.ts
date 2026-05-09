@@ -81,6 +81,12 @@ export interface CheckReport {
   warningRatio: number;            // 0-1
   warningPenalty: number;          // points deducted
   siteAiScore: number;             // 0-100 AI value score (geometric mean, page-type weighted)
+  aiDimensionAverages?: {          // per-dimension averages across all analyzed pages (0-10)
+    value: number;
+    originality: number;
+    relevance: number;
+    compliance: number;
+  };
 }
 
 export interface CheckOptions {

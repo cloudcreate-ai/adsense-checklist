@@ -83,8 +83,29 @@ Checks are divided into **Hard Requirements** (pass/fail) and **Soft Scoring** (
 Composite = Hard Pass Rate × 0.4 + Soft Score × 0.6 - Warning Penalty
 ```
 
-- **Hard**: Site scale, required pages, structure, performance baseline, policy compliance
-- **Soft**: Content quality, user experience, AI analysis, content relevance
+- **Hard**: Site scale, required pages, structure, performance baseline, policy compliance (including AI compliance)
+- **Soft**: AI value analysis (45%), content quality (35%), user experience (10%), page quality (10%)
+
+### AI Value Scoring
+
+Each page is scored on four dimensions (0-10) by AI:
+
+| Dimension | Description |
+|-----------|-------------|
+| **Value** | Does the page provide real, substantive information? |
+| **Originality** | Is the content original (not scraped/AI-generated/copied)? |
+| **Relevance** | How relevant is the page to the site's topic? |
+| **Compliance** | Does the content comply with AdSense policies? |
+
+Page score = geometric mean of all four dimensions. This means any weak dimension drags down the overall score significantly.
+
+Site score = page-type weighted average across all analyzed pages (homepage and content pages have highest weight).
+
+### Single-Page Analysis
+
+```bash
+adsense-check <site> --page <url> --ai
+```
 
 ## Options
 
@@ -97,6 +118,7 @@ Composite = Hard Pass Rate × 0.4 + Soft Score × 0.6 - Warning Penalty
 --sample-min <n>          Min content pages to sample (default: 20)
 --sample-ratio <ratio>    Content page sampling ratio 0-1 (default: 0.2)
 --ai                      Enable AI content quality analysis
+--page <url>              Analyze single page value (four-dimension scoring)
 -t, --timeout <ms>        Page load timeout (default: 30000)
 --api-key <key>           AI API key
 -o, --output <dir>        Report output dir (default: tmp)
