@@ -51,14 +51,14 @@ export function renderTerminalReport(report: CheckReport): string {
 
   // Topic info
   if (report.siteTopic) {
-    lines.push(chalk.gray(`  Topic: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
+    lines.push(chalk.gray(`  ${t('reporter.topic', lang)}: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
   }
 
   // Sampling info
   if (report.samplingInfo) {
     const s = report.samplingInfo;
     const confColor = s.confidence === 'high' ? chalk.green : s.confidence === 'medium' ? chalk.yellow : chalk.red;
-    lines.push(chalk.gray(`  Pages: ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%) ${confColor(s.confidence + ' confidence')}`));
+    lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%) ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
   }
 
   // Unsupported warning
@@ -113,19 +113,20 @@ export function renderTerminalReport(report: CheckReport): string {
   // Composite breakdown
   const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
   const softContrib = Math.round(report.softScore * 0.6);
-  lines.push(chalk.gray(`  │  Hard ${Math.round(hardContrib)}% × 0.4 + Soft ${report.softScore}% × 0.6 - Penalty ${report.warningPenalty} = ${report.compositeScore}`));
+  lines.push(chalk.gray(`  │  ${t('reporter.formula_label', lang, { hardPct: Math.round(hardContrib), softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`));
   if (report.siteAiScore > 0) {
-    lines.push(chalk.gray(`  │  AI Value Score: ${report.siteAiScore}/100 (geometric mean × page-type weights)`));
+    lines.push(chalk.gray(`  │  ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
   }
   if (report.aiDimensionAverages) {
     const d = report.aiDimensionAverages;
     const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
-    lines.push(chalk.gray(`  │  AI Dimensions: `) +
-      `${dimColor(d.value)('Value ' + d.value)} ` +
-      `${dimColor(d.originality)('Originality ' + d.originality)} ` +
-      `${dimColor(d.relevance)('Relevance ' + d.relevance)} ` +
-      `${dimColor(d.compliance)('Compliance ' + d.compliance)} ` +
-      chalk.gray('(avg /10)')
+    const dimLabel = (key: string, v: number) => `${t(`reporter.dim_${key}`, lang)} ${v}`;
+    lines.push(chalk.gray(`  │  ${t('reporter.ai_dimensions', lang)}: `) +
+      `${dimColor(d.value)(dimLabel('value', d.value))} ` +
+      `${dimColor(d.originality)(dimLabel('originality', d.originality))} ` +
+      `${dimColor(d.relevance)(dimLabel('relevance', d.relevance))} ` +
+      `${dimColor(d.compliance)(dimLabel('compliance', d.compliance))} ` +
+      chalk.gray(`(${t('reporter.avg_per_10', lang)})`)
     );
   }
   lines.push(chalk.gray(`  └─`));
@@ -244,32 +245,32 @@ export function renderMarkdownReport(report: CheckReport): string {
   const typeKey = `detector.type.${report.siteType}`;
   const typeLabel = t(typeKey, lang);
 
-  lines.push(`# AdSense 审核报告`);
+  lines.push(`# ${t('md.report_title', lang)}`);
   lines.push('');
-  lines.push(`| 项目 | 值 |`);
+  lines.push(`| ${t('md.table.project', lang)} | ${t('md.table.value', lang)} |`);
   lines.push(`|------|-----|`);
-  lines.push(`| URL | ${report.url} |`);
-  lines.push(`| 时间 | ${report.timestamp} |`);
-  lines.push(`| 站点类型 | ${typeLabel} (${report.siteTypeConfidence}) |`);
+  lines.push(`| ${t('md.table.url', lang)} | ${report.url} |`);
+  lines.push(`| ${t('md.table.time', lang)} | ${report.timestamp} |`);
+  lines.push(`| ${t('md.table.site_type', lang)} | ${typeLabel} (${report.siteTypeConfidence}) |`);
   if (report.siteTopic) {
-    lines.push(`| 主题 | ${report.siteTopic.topic} |`);
-    lines.push(`| 描述 | ${report.siteTopic.description} |`);
+    lines.push(`| ${t('md.table.topic', lang)} | ${report.siteTopic.topic} |`);
+    lines.push(`| ${t('md.table.description', lang)} | ${report.siteTopic.description} |`);
   }
   if (report.samplingInfo) {
     const s = report.samplingInfo;
-    lines.push(`| 抽样 | ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%, ${s.confidence}) |`);
+    lines.push(`| ${t('md.table.sampling', lang)} | ${s.totalDiscovered} ${t('md.table.total', lang)}, ${s.recentCount} ${t('md.table.recent', lang)}, ${s.sampledCount} ${t('md.table.sampled', lang)} (${s.samplePct}%, ${s.confidence} ${t('md.table.confidence', lang)}) |`);
   }
   lines.push('');
 
   // Composite score
-  lines.push(`## 综合评分: ${report.compositeScore}/100`);
+  lines.push(`## ${t('md.composite_score_title', lang)}: ${report.compositeScore}/100`);
   lines.push('');
 
   // Hard requirements
   const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
   const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
   const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';
-  lines.push(`### 硬性要求 ${hardLabel}`);
+  lines.push(`### ${t('md.hard_requirements', lang)} ${hardLabel}`);
   lines.push('');
   for (const cat of report.hardCategories) {
     for (const item of cat.items) {
@@ -280,7 +281,7 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push('');
 
   // Soft scoring
-  lines.push(`### 柔性评分 ${report.softScore}/100`);
+  lines.push(`### ${t('md.soft_scoring', lang)} ${report.softScore}/100`);
   lines.push('');
   for (const cat of report.softCategories) {
     const isAiCat = cat.name.includes('AI') || cat.name.includes('ai');
@@ -296,16 +297,16 @@ export function renderMarkdownReport(report: CheckReport): string {
   // AI value breakdown
   if (report.aiDimensionAverages) {
     const d = report.aiDimensionAverages;
-    lines.push(`### AI 价值分析`);
+    lines.push(`### ${t('md.ai_value_title', lang)}`);
     lines.push('');
-    lines.push(`| 维度 | 均分 |`);
+    lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} |`);
     lines.push(`|------|------|`);
-    lines.push(`| Value（价值） | ${d.value}/10 |`);
-    lines.push(`| Originality（原创） | ${d.originality}/10 |`);
-    lines.push(`| Relevance（相关） | ${d.relevance}/10 |`);
-    lines.push(`| Compliance（合规） | ${d.compliance}/10 |`);
+    lines.push(`| ${t('md.dim_value', lang)} | ${d.value}/10 |`);
+    lines.push(`| ${t('md.dim_originality', lang)} | ${d.originality}/10 |`);
+    lines.push(`| ${t('md.dim_relevance', lang)} | ${d.relevance}/10 |`);
+    lines.push(`| ${t('md.dim_compliance', lang)} | ${d.compliance}/10 |`);
     lines.push('');
-    lines.push(`**站点 AI 评分**: ${report.siteAiScore}/100（几何均值 × 页面类型加权）`);
+    lines.push(`**${t('md.site_ai_score', lang)}**: ${report.siteAiScore}/100（${t('md.geometric_weighted', lang)}）`);
     lines.push('');
   }
 
@@ -316,14 +317,14 @@ export function renderMarkdownReport(report: CheckReport): string {
 
   // Page details
   if (report.pages.length > 0) {
-    lines.push(`### 逐页详情 (${report.pages.length} pages)`);
+    lines.push(`### ${t('md.page_details', lang)} (${t('md.pages_count', lang, { count: report.pages.length })})`);
     lines.push('');
 
     const problems = report.pages.filter(p => p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
     const ok = report.pages.filter(p => p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'));
 
     // Table header
-    lines.push(`| 状态 | 类型 | 路径 | 评分 | 正文比 | V | O | R | C | AI综合 | 标题 |`);
+    lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.type', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
     lines.push(`|------|------|------|------|--------|---|---|---|---|--------|------|`);
 
     for (const p of [...problems, ...ok]) {
@@ -344,24 +345,24 @@ export function renderMarkdownReport(report: CheckReport): string {
     // Detailed issues for problem pages
     const detailPages = problems.filter(p => p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
     if (detailPages.length > 0) {
-      lines.push(`#### 问题页面详情`);
+      lines.push(`#### ${t('md.problem_pages', lang)}`);
       lines.push('');
       for (const p of detailPages) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-        lines.push(`**[${path}](${p.url})** (mechanical: ${p.score}/100)`);
+        lines.push(`**[${path}](${p.url})** (${t('reporter.mechanical_label', lang)}: ${p.score}/100)`);
         lines.push('');
         for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
         if (p.ai) {
           const ai = p.ai;
-          lines.push(`- AI 状态: ${MD_ICONS[ai.status]} ${ai.status}`);
+          lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${ai.status}`);
           if (ai.valueScore != null) {
-            lines.push(`- 四维评分: **Value ${ai.valueScore}** | **Originality ${ai.originalityScore}** | **Relevance ${ai.relevanceScore}** | **Compliance ${ai.complianceScore}**`);
+            lines.push(`- ${t('md.four_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}**`);
             const geoMean = Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
-            lines.push(`- AI 综合分: ${geoMean}/100（几何均值）`);
+            lines.push(`- ${t('md.ai_composite_score', lang)}: ${geoMean}/100（${t('md.geometric_mean', lang)}）`);
           }
-          lines.push(`- 评估: ${ai.assessment}`);
+          lines.push(`- ${t('md.assessment', lang)}: ${ai.assessment}`);
           if (ai.suggestions.length > 0) {
-            lines.push(`- 改进建议:`);
+            lines.push(`- ${t('md.suggestions', lang)}:`);
             for (const s of ai.suggestions.slice(0, 3)) lines.push(`  - ${s}`);
           }
         }
@@ -372,13 +373,13 @@ export function renderMarkdownReport(report: CheckReport): string {
 
   // Summary
   if (report.hardStatus === 'fail') {
-    lines.push(`**❌ NOT READY** — ${hardFailCount} 项失败需要修复`);
+    lines.push(t('md.summary.not_ready', lang, { count: hardFailCount }));
   } else if (report.hardStatus === 'warn') {
-    lines.push(`**⚠️ NEEDS FIXES** — ${hardWarnCount} 项警告待修复`);
+    lines.push(t('md.summary.needs_fixes', lang, { count: hardWarnCount }));
   } else if (report.warned > 0) {
-    lines.push(`**⚠️ MOSTLY READY** — 修复 ${report.warned} 项警告后可提交`);
+    lines.push(t('md.summary.mostly_ready', lang, { count: report.warned }));
   } else {
-    lines.push(`**✅ READY** — 可以提交 AdSense 审核`);
+    lines.push(t('md.summary.ready', lang));
   }
   lines.push('');
 
