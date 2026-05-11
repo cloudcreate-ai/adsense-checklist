@@ -1,5 +1,5 @@
 import type { CheckReport } from '../types.js';
-import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase } from './analyzer.js';
+import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase, getFastModel, getFastApiBase } from './analyzer.js';
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
@@ -65,13 +65,15 @@ export function estimateByRules(report: CheckReport): {
 const AI_LANG_NAMES: Record<string, string> = { en: 'English', zh: '中文' };
 
 /**
- * Expert model deep assessment — runs after all checks complete.
+ * Final assessment summary — runs after all checks complete.
  * Uses the full report including per-page AI analysis as context.
+ * When expert=true, uses expert model; otherwise uses fast model.
  */
-export async function summarizeByExpert(
+export async function summarizeFinal(
   report: CheckReport,
   lang: string,
-  date: string
+  date: string,
+  expert: boolean
 ): Promise<{
   probability: number;
   verdict: string;
@@ -81,7 +83,8 @@ export async function summarizeByExpert(
   modelName: string;
 } | null> {
   const langName = AI_LANG_NAMES[lang] ?? lang;
-  const model = getExpertModel();
+  const model = expert ? getExpertModel() : getFastModel();
+  const apiBase = expert ? getExpertApiBase() : getFastApiBase();
 
   const pageSummaries = report.pages
     .filter(p => p.ai)

@@ -32,7 +32,7 @@ function getApiKey(key?: string): string | undefined {
   return key || process.env.AI_API_KEY;
 }
 
-function getFastApiBase(): string {
+export function getFastApiBase(): string {
   return process.env.AI_FAST_API_BASE || process.env.AI_API_BASE || 'https://api.deepseek.com';
 }
 
@@ -40,7 +40,7 @@ export function getExpertApiBase(): string {
   return process.env.AI_EXPERT_API_BASE || process.env.AI_API_BASE || 'https://api.anthropic.com';
 }
 
-function getFastModel(): string {
+export function getFastModel(): string {
   return process.env.AI_FAST_MODEL || process.env.AI_MODEL || 'deepseek-chat';
 }
 

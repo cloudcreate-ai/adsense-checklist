@@ -6,7 +6,7 @@ import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
 import { analyzeWithAI, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
-import { estimateByRules, summarizeByExpert } from './ai/approval.js';
+import { estimateByRules, summarizeFinal } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
@@ -516,9 +516,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Expert AI summary (only with --ai and API key)
     let expertSummary: CheckReport['expertSummary'] = undefined;
-    if (expert && !skipAi && apiKeyResolved) {
+    if (!skipAi && apiKeyResolved) {
       try {
-        expertSummary = await summarizeByExpert(
+        expertSummary = await summarizeFinal(
           {
             url, timestamp: new Date().toISOString(), lang, siteType,
             siteTypeConfidence, siteTopic,
@@ -536,7 +536,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
             approvalEstimate,
           },
           lang,
-          new Date().toISOString().slice(0, 10)
+          new Date().toISOString().slice(0, 10),
+          expert
         ) ?? undefined;
       } catch { /* silent */ }
     }
