@@ -309,7 +309,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     for (const c of classifiedUrls) {
       const norm = normalizeUrl(c.url);
       if (alwaysUrls.has(norm)) continue;
-      if (c.type === 'utility' || c.type === 'unknown') continue; // skip low-value types
+      if (c.type === 'utility') continue; // skip low-value types
       const group = typeGroups.get(c.type) ?? [];
       group.push(c.url);
       typeGroups.set(c.type, group);
