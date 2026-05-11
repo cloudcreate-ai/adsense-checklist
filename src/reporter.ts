@@ -142,6 +142,21 @@ export function renderTerminalReport(report: CheckReport): string {
       chalk.gray(`(${t('reporter.avg_per_10', lang)})`)
     );
   }
+  if (report.aiDimensionStats) {
+    const s = report.aiDimensionStats;
+    const totalPages = report.pages.length;
+    const dimStatLine = (key: 'value' | 'originality' | 'relevance' | 'compliance') => {
+      const dim = s[key];
+      const c = dim.min < 4 ? chalk.red : dim.min < 6 ? chalk.yellow : chalk.green;
+      const lowText = dim.lowCount > 0 ? chalk.red(`  ${dim.lowCount}/${totalPages}, ${dim.lowPct}%`) : '';
+      return `  │    ${c(`${t(`reporter.dim_${key}`, lang)} 均${dim.avg} 最低${dim.min}`)}${lowText}`;
+    };
+    lines.push(chalk.gray(`  │  ${t('reporter.dim_stats_label', lang)}:`));
+    lines.push(chalk.gray(dimStatLine('value')));
+    lines.push(chalk.gray(dimStatLine('originality')));
+    lines.push(chalk.gray(dimStatLine('relevance')));
+    lines.push(chalk.gray(dimStatLine('compliance')));
+  }
   lines.push(chalk.gray(`  └─`));
   lines.push('');
 
@@ -317,7 +332,25 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push('');
 
   // AI value breakdown
-  if (report.aiDimensionAverages) {
+  if (report.aiDimensionStats) {
+    const s = report.aiDimensionStats;
+    const totalPages = report.pages.length;
+    const dimRow = (key: 'value' | 'originality' | 'relevance' | 'compliance', label: string) => {
+      const dim = s[key];
+      return `| ${label} | ${dim.avg}/10 | ${dim.min}/10 | ${dim.lowCount}/${totalPages}, ${dim.lowPct}% |`;
+    };
+    lines.push(`### ${t('md.ai_value_title', lang)}`);
+    lines.push('');
+    lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} | ${t('md.table.min_score', lang)} | ${t('md.table.low_count', lang)} |`);
+    lines.push(`|------|------|------|------|`);
+    lines.push(dimRow('value', t('md.dim_value', lang)));
+    lines.push(dimRow('originality', t('md.dim_originality', lang)));
+    lines.push(dimRow('relevance', t('md.dim_relevance', lang)));
+    lines.push(dimRow('compliance', t('md.dim_compliance', lang)));
+    lines.push('');
+    lines.push(`**${t('md.site_ai_score', lang)}**: ${report.siteAiScore}/100（${t('md.geometric_weighted', lang)}）`);
+    lines.push('');
+  } else if (report.aiDimensionAverages) {
     const d = report.aiDimensionAverages;
     lines.push(`### ${t('md.ai_value_title', lang)}`);
     lines.push('');

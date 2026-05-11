@@ -477,6 +477,26 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       compliance: Math.round(pageAnalyses.reduce((s, a) => s + (a.complianceScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
     } : undefined;
 
+    // Per-dimension stats (avg, min, low-count)
+    const LOW_THRESHOLD = 6;
+    const dimStats = (key: 'valueScore' | 'originalityScore' | 'relevanceScore' | 'complianceScore') => {
+      if (pageAnalyses.length === 0) return undefined;
+      const scores = pageAnalyses.map(a => a[key] ?? 5);
+      const lowCount = scores.filter(s => s < LOW_THRESHOLD).length;
+      return {
+        avg: Math.round(scores.reduce((s, v) => s + v, 0) / scores.length * 10) / 10,
+        min: Math.min(...scores),
+        lowCount,
+        lowPct: Math.round(lowCount / scores.length * 1000) / 10,
+      };
+    };
+    const aiDimensionStats = pageAnalyses.length > 0 ? {
+      value: dimStats('valueScore')!,
+      originality: dimStats('originalityScore')!,
+      relevance: dimStats('relevanceScore')!,
+      compliance: dimStats('complianceScore')!,
+    } : undefined;
+
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence,
@@ -500,6 +520,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       warningPenalty,
       siteAiScore,
       aiDimensionAverages,
+      aiDimensionStats,
     };
   } finally {
     await browser.close();

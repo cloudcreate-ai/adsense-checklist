@@ -92,6 +92,12 @@ export interface CheckReport {
     relevance: number;
     compliance: number;
   };
+  aiDimensionStats?: {             // per-dimension stats with min and low-count
+    value: { avg: number; min: number; lowCount: number; lowPct: number };
+    originality: { avg: number; min: number; lowCount: number; lowPct: number };
+    relevance: { avg: number; min: number; lowCount: number; lowPct: number };
+    compliance: { avg: number; min: number; lowCount: number; lowPct: number };
+  };
 }
 
 export interface CheckOptions {
