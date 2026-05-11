@@ -101,7 +101,7 @@ function getAiLangName(lang: string): string {
 
 const PAGE_CHARS = 5000;
 
-async function analyzePage(
+export async function analyzeSinglePage(
   page: { url: string; text: string },
   langName: string,
   date: string,
@@ -288,7 +288,7 @@ Reply in ${langName} with JSON:
   return result;
 }
 
-async function analyzeOverall(
+export async function analyzeOverall(
   pageAnalyses: PageAiAnalysis[],
   langName: string,
   date: string
@@ -322,6 +322,25 @@ Based on these results, provide improvement suggestions in ${langName} with JSON
   }
 }
 
+/**
+ * Analyze a batch of pages concurrently.
+ * Used by pipeline mode where crawling and AI overlap.
+ */
+export async function analyzeBatch(
+  pages: Array<{ url: string; text: string }>,
+  lang: string,
+  apiKey: string,
+  siteTopic?: SiteTopic,
+  onProgress?: (message: string) => void
+): Promise<PageAiAnalysis[]> {
+  const langName = getAiLangName(lang);
+  const date = new Date().toISOString().slice(0, 10);
+  const progress = onProgress ?? (() => {});
+  const paths = pages.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } });
+  progress(`AI: analyzing ${pages.length} page(s) (${paths.join(', ')})`);
+  return Promise.all(pages.map(p => analyzeSinglePage(p, langName, date, siteTopic)));
+}
+
 export async function analyzeWithAI(
   pages: Array<{ url: string; text: string }>,
   lang: string = 'en',
@@ -349,7 +368,7 @@ export async function analyzeWithAI(
       const totalBatches = Math.ceil(pages.length / concurrency);
       progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
-        batch.map(p => analyzePage(p, langName, date, siteTopic))
+        batch.map(p => analyzeSinglePage(p, langName, date, siteTopic))
       );
       pageAnalyses.push(...results);
     }

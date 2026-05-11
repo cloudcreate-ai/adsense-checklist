@@ -5,7 +5,7 @@ import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
-import { analyzeWithAI, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
+import { analyzeWithAI, analyzeBatch, analyzeOverall, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
 import { estimateByRules, summarizeFinal } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
@@ -172,35 +172,63 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const deadLinks: string[] = [];
     const crawledUrls = new Set([homeData.url.replace(/\/+$/, '')]);
 
-    async function crawlPage(link: string) {
+    async function crawlPage(link: string): Promise<boolean> {
       const norm = link.replace(/\/+$/, '').split('#')[0];
-      if (crawledUrls.has(norm)) return;
+      if (crawledUrls.has(norm)) return false;
       crawledUrls.add(norm);
       try {
         const pg = await browser.newPage();
         const data = await fetchPage(pg, link, timeout);
         const postNorm = data.url.replace(/\/+$/, '').split('#')[0];
-        // Skip if SPA navigation resolved to an already-crawled page
         if (crawledUrls.has(postNorm) && postNorm !== norm) {
           await pg.close();
-          return;
+          return false;
         }
         crawledUrls.add(postNorm);
-        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); }
-        else {
-          pages.push({ url: data.url, text: data.text, title: data.title, links: data.links });
-          allSignals.push(data.signals);
-        }
+        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); await pg.close(); return false; }
+        pages.push({ url: data.url, text: data.text, title: data.title, links: data.links });
+        allSignals.push(data.signals);
         await pg.close();
-      } catch { deadLinks.push(`${link} (timeout)`); }
+        return true;
+      } catch { deadLinks.push(`${link} (timeout)`); return false; }
     }
 
-    // Crawl initial batch
-    progress(`Crawling ${uniqueLinks.length} pages...`);
-    for (let i = 0; i < uniqueLinks.length; i++) {
-      const link = uniqueLinks[i];
-      progress(`Crawling: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
-      await crawlPage(link);
+    // ── Pipeline: crawl + AI overlap ──
+    const aiAnalyses: PageAiAnalysis[] = [];
+    const aiPromises: Promise<void>[] = [];
+    let totalCrawled = 0;
+    let crawlBatchNum = 0;
+
+    async function launchAIBatch(batchPages: Array<{ url: string; text: string; title: string; links: string[] }>) {
+      if (skipAi || !apiKeyResolved || batchPages.length === 0) return;
+      const p = analyzeBatch(batchPages, lang, apiKeyResolved, siteTopic, progress);
+      aiPromises.push(p.then(results => { aiAnalyses.push(...results); }));
+    }
+
+    function chunkArray<T>(arr: T[], size: number): T[][] {
+      const chunks: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+      return chunks;
+    }
+
+    // Crawl initial batch in chunks, feeding pages to AI as they complete
+    const phase1Chunks = chunkArray(uniqueLinks, concurrency);
+    progress(`Crawling ${uniqueLinks.length} pages (${phase1Chunks.length} batches)...`);
+
+    // Send homepage (already in pages) to AI before crawl loop
+    await launchAIBatch([pages[0]]);
+
+    for (const chunk of phase1Chunks) {
+      crawlBatchNum++;
+      const beforeCount = pages.length;
+      for (const link of chunk) {
+        progress(`Crawling: [${totalCrawled + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
+        await crawlPage(link);
+        totalCrawled++;
+      }
+      const newPages = pages.slice(beforeCount);
+      // Launch AI for this chunk while we crawl the next one
+      await launchAIBatch(newPages);
     }
 
     // Discover content pages (recursively through listing pages)
@@ -223,7 +251,6 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         seenInDiscovery.add(norm);
         const pt = classifyPage(child);
         if (pt === 'listing') {
-          // Listing pages: will need to crawl to find their children, queue for deeper discovery
           if (current.depth < MAX_DISCOVERY_DEPTH) {
             // Will discover their links when we crawl them
           }
@@ -250,25 +277,34 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const sortedContent = sortByFreshness([...discoveredContent]);
     const toCrawl = sortedContent.slice(0, phase2Limit);
     if (toCrawl.length > 0) progress(`Discovering content pages: ${toCrawl.length} to crawl (from ${discoveredContent.size} discovered)...`);
-    for (let i = 0; i < toCrawl.length; i++) {
-      const link = toCrawl[i];
-      progress(`Crawling: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}${new URL(link).search}`);
-      await crawlPage(link);
 
-      // After crawling a page, check if it has deeper content links we missed
-      const crawledPage = pages[pages.length - 1];
-      if (crawledPage && crawledPage.url === link) {
-        const deeperChildren = discoverChildLinks(link, crawledPage.links, origin, CHILDREN_PER_LISTING);
+    // Phase 2: crawl discovered content pages in chunks, feeding to AI
+    const phase2Chunks = chunkArray(toCrawl, concurrency);
+    for (const chunk of phase2Chunks) {
+      const beforeCount = pages.length;
+      for (const link of chunk) {
+        progress(`Crawling: ${new URL(link).pathname}${new URL(link).search}`);
+        await crawlPage(link);
+      }
+      const newPages = pages.slice(beforeCount);
+      await launchAIBatch(newPages);
+
+      // After crawling, check for deeper content links
+      for (const crawledPage of pages.slice(beforeCount)) {
+        const deeperChildren = discoverChildLinks(crawledPage.url, crawledPage.links, origin, CHILDREN_PER_LISTING);
         for (const dc of deeperChildren) {
           const dnorm = dc.replace(/\/+$/, '');
           if (!crawledUrls.has(dnorm) && !discoveredContent.has(dnorm) && classifyPage(dc) !== 'listing') {
-            // Found deeper content page, add to queue if we have room
-            if (i + discoveredContent.size < maxContent * 2) {
-              discoveredContent.add(dc);
-            }
+            discoveredContent.add(dc);
           }
         }
       }
+    }
+
+    // Wait for all AI analyses to complete
+    if (aiPromises.length > 0) {
+      progress(`AI: waiting for ${aiPromises.length} batch(es) to complete...`);
+      await Promise.all(aiPromises);
     }
 
     // Deduplicate
@@ -279,7 +315,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     });
 
     // Progress info
-    progress(`Pages: ${uniquePages.length} analyzed`);
+    progress(`Pages: ${uniquePages.length} crawled, ${aiAnalyses.length} AI-analyzed`);
 
     // Detect site type: prefer AI topic, fallback to DOM signals
     progress('Detecting site type...');
@@ -339,19 +375,31 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     allCategories.push({ ...policyCat, group: 'hard' });
 
     // AI → soft (value analysis with four-dimension scoring)
-    let pageAnalyses: PageAiAnalysis[] = [];
+    // In pipeline mode, per-page analysis is already done. Just need overall suggestions.
+    let pageAnalyses: PageAiAnalysis[] = aiAnalyses;
     if (!skipAi) {
       try {
-        progress(`AI analysis: ${uniquePages.length} pages...`);
-        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic, concurrency);
-        pageAnalyses = aiResult.pageAnalyses;
+        if (pageAnalyses.length === 0 && apiKeyResolved) {
+          // Fallback: if pipeline didn't produce results, run analyzeWithAI
+          progress(`AI analysis: ${uniquePages.length} pages...`);
+          const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic, concurrency);
+          pageAnalyses = aiResult.pageAnalyses;
 
-        // AI value analysis category (displayed in report)
-        const aiItems: CheckItem[] = [];
-        if (aiResult.suggestions.length > 0) {
-          aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detailList: aiResult.suggestions });
+          // AI value analysis category (displayed in report)
+          const aiItems: CheckItem[] = [];
+          if (aiResult.suggestions.length > 0) {
+            aiItems.push({ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: aiResult.suggestions.length }), detailList: aiResult.suggestions });
+          }
+          allCategories.push({ name: t('group.ai_value', lang), items: aiItems, group: 'soft' });
+        } else if (apiKeyResolved && pageAnalyses.length > 0) {
+          // Pipeline already ran — just generate overall suggestions
+          const langName = ['en', 'zh'].includes(lang) ? lang : 'en';
+          const dateStr = new Date().toISOString().slice(0, 10);
+          const overall = await analyzeOverall(pageAnalyses, langName, dateStr);
+          if (overall.suggestions.length > 0) {
+            allCategories.push({ name: t('group.ai_value', lang), items: [{ name: t('item.ai.suggestions', lang), status: 'warn', message: t('ai.suggestion_count', lang, { count: overall.suggestions.length }), detailList: overall.suggestions }], group: 'soft' });
+          }
         }
-        allCategories.push({ name: t('group.ai_value', lang), items: aiItems, group: 'soft' });
 
         // Compliance hard check: flag pages with serious violations
         let suspiciousPages = pageAnalyses.filter(a => {
