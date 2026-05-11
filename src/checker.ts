@@ -5,13 +5,42 @@ import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
-import { analyzeWithAI, analyzeBatch, analyzeOverall, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
+import { analyzeWithAI, analyzeBatch, analyzeOverall, type PageAiAnalysis } from './ai/analyzer.js';
 import { estimateByRules, summarizeFinal } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
 import { scorePage, scoreCategory, computeCompositeScore } from './scorer.js';
 import { t } from './i18n.js';
+
+// ── Timing tracker ──────────────────────────────────────────────────────
+interface TimingPhase {
+  phase: string;
+  ms: number;
+  detail?: string;
+}
+
+class TimingTracker {
+  phases: TimingPhase[] = [];
+  start(phase: string) { this._start = Date.now(); this._phase = phase; }
+  end(detail?: string) {
+    if (this._start) {
+      this.phases.push({ phase: this._phase!, ms: Date.now() - this._start, detail });
+    }
+  }
+  print() {
+    const total = this.phases.reduce((s, p) => s + p.ms, 0);
+    console.error('\n─── Timing breakdown ───');
+    for (const p of this.phases) {
+      const detail = p.detail ? ` (${p.detail})` : '';
+      console.error(`  ${String(p.ms).padStart(6)}ms  ${p.phase}${detail}`);
+    }
+    console.error(`  ${String(total).padStart(6)}ms  TOTAL`);
+    console.error('────────────────────────────────');
+  }
+  private _start: number | null = null;
+  private _phase: string | null = null;
+}
 
 function extractMainContent(text: string, allPageTexts: string[]): string {
   const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
@@ -118,6 +147,7 @@ function sortByFreshness(urls: string[]): string[] {
 export async function check(options: CheckOptions): Promise<CheckReport> {
   const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, expert = false, concurrency = 5, onProgress } = options;
   const apiKeyResolved = apiKey || process.env.AI_API_KEY;
+  const timing = new TimingTracker();
 
   // Cap phase limits by total crawl budget
   const phase1Limit = Math.min(maxPages, maxCrawl);
@@ -126,25 +156,38 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
   const progress = onProgress ?? (() => {});
 
   try {
+    timing.start('launch');
     progress('Launching browser...');
     const homepage = await browser.newPage();
+    timing.end();
+
+    timing.start('homepage');
     progress(`Fetching ${url}...`);
     const homeData = await fetchPage(homepage, url, timeout);
+    timing.end();
+
+    timing.start('h1');
     const h1Count = await homepage.evaluate(() => document.querySelectorAll('h1').length);
+    timing.end();
+
+    timing.start('sitemap');
     progress('Fetching sitemap...');
     const sitemapUrls = await fetchSitemapUrls(origin);
+    timing.end();
 
     // AI topic analysis (runs early, after homepage is fetched)
     let siteTopic: SiteTopic | undefined;
     if (!skipAi) {
       try {
         if (apiKeyResolved) {
+          timing.start('ai-topic');
           progress('AI: analyzing site topic...');
           siteTopic = await analyzeSiteTopic(
             { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
             lang,
             apiKeyResolved
           );
+          timing.end(siteTopic.topic);
           progress(`AI: site type = ${siteTopic.type}, topic = ${siteTopic.topic}`);
         }
       } catch {}
@@ -172,9 +215,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const deadLinks: string[] = [];
     const crawledUrls = new Set([homeData.url.replace(/\/+$/, '')]);
 
-    async function crawlPage(link: string): Promise<boolean> {
+    async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[] } | null> {
       const norm = link.replace(/\/+$/, '').split('#')[0];
-      if (crawledUrls.has(norm)) return false;
+      if (crawledUrls.has(norm)) return null;
       crawledUrls.add(norm);
       try {
         const pg = await browser.newPage();
@@ -182,15 +225,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         const postNorm = data.url.replace(/\/+$/, '').split('#')[0];
         if (crawledUrls.has(postNorm) && postNorm !== norm) {
           await pg.close();
-          return false;
+          return null;
         }
         crawledUrls.add(postNorm);
-        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); await pg.close(); return false; }
-        pages.push({ url: data.url, text: data.text, title: data.title, links: data.links });
+        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); await pg.close(); return null; }
+        const result = { url: data.url, text: data.text, title: data.title, links: data.links };
         allSignals.push(data.signals);
         await pg.close();
-        return true;
-      } catch { deadLinks.push(`${link} (timeout)`); return false; }
+        return result;
+      } catch { deadLinks.push(`${link} (timeout)`); return null; }
     }
 
     // ── Pipeline: crawl + AI overlap ──
@@ -211,31 +254,35 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       return chunks;
     }
 
-    // Crawl initial batch in chunks, feeding pages to AI as they complete
+    // Crawl initial batch in concurrent chunks, feeding pages to AI as they complete
     const phase1Chunks = chunkArray(uniqueLinks, concurrency);
-    progress(`Crawling ${uniqueLinks.length} pages (${phase1Chunks.length} batches)...`);
+    progress(`Crawling ${uniqueLinks.length} pages (${phase1Chunks.length} batches, ${concurrency} concurrent)...`);
 
     // Send homepage (already in pages) to AI before crawl loop
     await launchAIBatch([pages[0]]);
 
+    timing.start('phase1-crawl');
     for (const chunk of phase1Chunks) {
       crawlBatchNum++;
       const beforeCount = pages.length;
-      for (const link of chunk) {
-        progress(`Crawling: [${totalCrawled + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
-        await crawlPage(link);
+      // Crawl chunk concurrently
+      const results = await Promise.all(chunk.map((link, i) => {
         totalCrawled++;
-      }
-      const newPages = pages.slice(beforeCount);
+        return crawlPage(link).then(r => { progress(`Crawling: [${totalCrawled}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`); return r; });
+      }));
+      const newPages = results.filter((r): r is NonNullable<typeof r> => r !== null);
+      pages.push(...newPages);
       // Launch AI for this chunk while we crawl the next one
       await launchAIBatch(newPages);
     }
+    timing.end();
 
     // Discover content pages (recursively through listing pages)
     const CHILDREN_PER_LISTING = 10;
     const MAX_DISCOVERY_DEPTH = 3;
     const discoveredContent = new Set<string>();
 
+    timing.start('phase2-discovery');
     // BFS discovery: follow listing pages up to MAX_DISCOVERY_DEPTH
     const discoveryQueue: Array<{ url: string; links: string[]; depth: number }> =
       pages.map(p => ({ url: p.url, links: p.links, depth: 0 }));
@@ -270,6 +317,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         }
       }
     }
+    timing.end();
 
     // Sort by freshness (newest first) then take maxContent, capped by remaining crawl budget
     const remainingBudget = Math.max(0, maxCrawl - crawledUrls.size);
@@ -278,19 +326,18 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const toCrawl = sortedContent.slice(0, phase2Limit);
     if (toCrawl.length > 0) progress(`Discovering content pages: ${toCrawl.length} to crawl (from ${discoveredContent.size} discovered)...`);
 
-    // Phase 2: crawl discovered content pages in chunks, feeding to AI
+    // Phase 2: crawl discovered content pages in concurrent chunks, feeding to AI
     const phase2Chunks = chunkArray(toCrawl, concurrency);
+    timing.start('phase2-crawl');
     for (const chunk of phase2Chunks) {
-      const beforeCount = pages.length;
-      for (const link of chunk) {
-        progress(`Crawling: ${new URL(link).pathname}${new URL(link).search}`);
-        await crawlPage(link);
-      }
-      const newPages = pages.slice(beforeCount);
+      // Crawl chunk concurrently
+      const results = await Promise.all(chunk.map(link => crawlPage(link).then(r => { progress(`Crawling: ${new URL(link).pathname}${new URL(link).search}`); return r; })));
+      const newPages = results.filter((r): r is NonNullable<typeof r> => r !== null);
+      pages.push(...newPages);
       await launchAIBatch(newPages);
 
       // After crawling, check for deeper content links
-      for (const crawledPage of pages.slice(beforeCount)) {
+      for (const crawledPage of newPages) {
         const deeperChildren = discoverChildLinks(crawledPage.url, crawledPage.links, origin, CHILDREN_PER_LISTING);
         for (const dc of deeperChildren) {
           const dnorm = dc.replace(/\/+$/, '');
@@ -300,11 +347,14 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         }
       }
     }
+    timing.end();
 
     // Wait for all AI analyses to complete
     if (aiPromises.length > 0) {
+      timing.start('ai-wait');
       progress(`AI: waiting for ${aiPromises.length} batch(es) to complete...`);
       await Promise.all(aiPromises);
+      timing.end();
     }
 
     // Deduplicate
@@ -360,10 +410,14 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     allCategories.push({ ...structCat, group: 'hard' });
 
     // Performance → split: hard (speed, viewport, overflow) + soft (font, popup)
+    timing.start('perf');
     const playBrowser = await browser.launch();
     const perfPage = await browser.newPage();
+    timing.start('perf');
     const perfCat = await checkPerformance(perfPage, url, playBrowser, lang);
     await perfPage.close();
+    timing.end();
+
     const hardPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
     const hardPerfItems = perfCat.items.filter(i => hardPerfNames.includes(i.name));
     const softPerfItems = perfCat.items.filter(i => !hardPerfNames.includes(i.name));
@@ -402,60 +456,11 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         }
 
         // Compliance hard check: flag pages with serious violations
-        let suspiciousPages = pageAnalyses.filter(a => {
+        // Single-pass — AI prompt already handles false positive filtering
+        const suspiciousPages = pageAnalyses.filter(a => {
           const c = a.complianceScore ?? 5;
           return c > 2 && c <= 5;
         });
-
-        // Also recheck very low-score pages with short text (likely 404/error pages being false-flagged)
-        const shortTextPages = pageAnalyses.filter(a => {
-          const c = a.complianceScore ?? 5;
-          const text = uniquePages.find(up => up.url === a.url)?.text ?? '';
-          return c <= 2 && text.replace(/\s+/g, '').length < 200;
-        });
-        const recheckUrls = new Set(suspiciousPages.map(p => p.url));
-        for (const p of shortTextPages) {
-          if (!recheckUrls.has(p.url)) {
-            suspiciousPages.push(p);
-            recheckUrls.add(p.url);
-          }
-        }
-
-        // Second-pass compliance check for suspicious pages to reduce false positives
-        if (suspiciousPages.length > 0) {
-          if (apiKeyResolved) {
-            const recheckResults = await recheckCompliance(
-              suspiciousPages.map(p => ({
-                url: p.url,
-                text: uniquePages.find(up => up.url === p.url)?.text ?? '',
-                firstComplianceScore: p.complianceScore ?? 5,
-              })),
-              lang,
-              progress
-            );
-            // Update page analyses with re-checked scores
-            for (const analysis of pageAnalyses) {
-              const recheck = recheckResults.get(analysis.url);
-              if (recheck) {
-                analysis.complianceScore = recheck.complianceScore;
-              }
-            }
-            // Recompute statuses based on updated scores
-            for (const analysis of pageAnalyses) {
-              const v = analysis.valueScore ?? 5;
-              const o = analysis.originalityScore ?? 5;
-              const r = analysis.relevanceScore ?? 5;
-              const c = analysis.complianceScore ?? 5;
-              const geoMean = Math.pow(v * o * r * c, 0.25);
-              analysis.status = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
-            }
-            // Recompute suspicious pages after re-check
-            suspiciousPages = pageAnalyses.filter(a => {
-              const c = a.complianceScore ?? 5;
-              return c > 2 && c <= 5;
-            });
-          }
-        }
 
         const seriousViolations = pageAnalyses.filter(a => (a.complianceScore ?? 5) <= 2);
         const complianceItems: CheckItem[] = [];
@@ -464,7 +469,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
             name: t('item.ai.compliance_serious', lang),
             status: 'fail',
             message: t('ai.compliance_serious', lang, { count: seriousViolations.length }),
-            detail: seriousViolations.map(a => new URL(a.url).pathname).join('; '),
+            detailList: seriousViolations.map(a => new URL(a.url).pathname),
           });
         } else if (suspiciousPages.length > pageAnalyses.length * 0.2) {
           complianceItems.push({
@@ -562,12 +567,14 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     let expertSummary: CheckReport['expertSummary'] = undefined;
     if (!skipAi && apiKeyResolved) {
       try {
+        timing.start('ai-fast-summary');
         fastSummary = await summarizeFinal(
           { ...partialReport, approvalEstimate },
           lang,
           new Date().toISOString().slice(0, 10),
           false
         ) ?? undefined;
+        timing.end();
       } catch { /* silent */ }
 
       // Expert model (only when --expert flag and models differ)
@@ -575,16 +582,20 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         const { getFastModel, getExpertModel } = await import('./ai/analyzer.js');
         if (getExpertModel() !== getFastModel()) {
           try {
+            timing.start('ai-expert-summary');
             expertSummary = await summarizeFinal(
               { ...partialReport, approvalEstimate, fastSummary },
               lang,
               new Date().toISOString().slice(0, 10),
               true
             ) ?? undefined;
+            timing.end();
           } catch { /* silent */ }
         }
       }
     }
+
+    timing.print();
 
     return {
       ...partialReport,

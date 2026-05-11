@@ -38,8 +38,8 @@ export function checkPolicyCompliance(pages: Array<{ url: string; text: string }
     message: violations.length > 0
       ? t('policy.keywords.fail', lang, { count: violations.length })
       : t('policy.keywords.pass', lang),
-    detail: violations.length > 0
-      ? violations.map(v => `${new URL(v.url).pathname}: "${v.match}"`).join('; ')
+    detailList: violations.length > 0
+      ? violations.map(v => `${new URL(v.url).pathname}: "${v.match}"`)
       : undefined,
   });
 

@@ -20,7 +20,7 @@ export async function checkSiteStructure(
   const internal = links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } });
   items.push({ name: t('item.structure.internal', lang), status: internal.length >= 5 ? 'pass' : 'warn', message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }) });
 
-  items.push({ name: t('item.structure.deadlinks', lang), status: deadLinks.length > 0 ? 'fail' : 'pass', message: t(deadLinks.length > 0 ? 'structure.deadlinks.fail' : 'structure.deadlinks.pass', lang, { count: deadLinks.length }), detail: deadLinks.length > 0 ? deadLinks.join(', ') : undefined });
+  items.push({ name: t('item.structure.deadlinks', lang), status: deadLinks.length > 3 ? 'fail' : deadLinks.length > 0 ? 'warn' : 'pass', message: t(deadLinks.length > 3 ? 'structure.deadlinks.fail' : deadLinks.length > 0 ? 'structure.deadlinks.warn' : 'structure.deadlinks.pass', lang, { count: deadLinks.length }), detailList: deadLinks.length > 0 ? deadLinks : undefined });
 
   return { name: t('cat.structure', lang), items };
 }

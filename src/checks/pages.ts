@@ -44,7 +44,7 @@ export async function checkRequiredPages(
     const path = foundUrl ? (() => { try { return new URL(foundUrl).pathname; } catch { return ''; } })() : '';
     items.push(found
       ? { name: displayName, status: 'pass', message: t('pages.found', lang, { name: displayName, path }) }
-      : { name: displayName, status: page.required ? 'fail' : 'warn', message: t(page.required ? 'pages.missing_required' : 'pages.missing_optional', lang, { name: displayName }) }
+      : { name: displayName, status: 'warn', message: t('pages.missing_recommended', lang, { name: displayName }) }
     );
   }
 

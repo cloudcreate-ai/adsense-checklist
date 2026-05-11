@@ -48,11 +48,13 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
   // Always wait for network idle to ensure SPA has finished rendering,
   // then extra time for any remaining JS updates
   try {
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 });
   } catch {}
-  await page.waitForTimeout(1500);
 
   const urlAfterRender = page.url();
+
+  // Small buffer after networkidle to let any final JS settle
+  await page.waitForTimeout(500);
 
   let text = await page.evaluate(() => document.body?.innerText ?? '');
 

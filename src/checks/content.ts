@@ -124,7 +124,7 @@ function checkContentSite(
     if (ratio < 0.3 && total > 200) lowRatio.push({ url: page.url, ratio: Math.round(ratio * 100), chars: content });
   }
   items.push(lowRatio.length > 0
-    ? { name: t('item.content.ratio', lang), status: 'fail', message: t('content.ratio.fail', lang, { count: lowRatio.length }), detail: lowRatio.map(p => `${new URL(p.url).pathname}: ${p.ratio}% (${p.chars} chars)`).join('; ') }
+    ? { name: t('item.content.ratio', lang), status: 'fail', message: t('content.ratio.fail', lang, { count: lowRatio.length }), detailList: lowRatio.map(p => `${new URL(p.url).pathname}: ${p.ratio}% (${p.chars} chars)`) }
     : { name: t('item.content.ratio', lang), status: 'pass', message: t('content.ratio.pass', lang) }
   );
 
@@ -185,7 +185,7 @@ function checkGameSite(
     if (gamePages > 0) {
       const ratio = thinDesc / gamePages;
       items.push(ratio > 0.5
-        ? { name: t('item.content.game_desc', lang), status: 'warn', message: t('content.game_desc.warn', lang, { thin: thinDesc, total: gamePages }), detail: thinPages.slice(0, 5).join(', ') }
+        ? { name: t('item.content.game_desc', lang), status: 'warn', message: t('content.game_desc.warn', lang, { thin: thinDesc, total: gamePages }), detailList: thinPages.slice(0, 5).map(p => `${new URL(p).pathname}`) }
         : { name: t('item.content.game_desc', lang), status: 'pass', message: t('content.game_desc.pass', lang, { total: gamePages }) }
       );
     }
@@ -244,7 +244,7 @@ function checkVideoSite(
     if (subpages.length > 0) {
       const ratio = thinDesc / subpages.length;
       items.push(ratio > 0.5
-        ? { name: t('item.content.video_desc', lang), status: 'warn', message: t('content.video_desc.warn', lang, { thin: thinDesc, total: subpages.length }), detail: thinPages.slice(0, 5).join(', ') }
+        ? { name: t('item.content.video_desc', lang), status: 'warn', message: t('content.video_desc.warn', lang, { thin: thinDesc, total: subpages.length }), detailList: thinPages.slice(0, 5).map(p => `${new URL(p).pathname}`) }
         : { name: t('item.content.video_desc', lang), status: 'pass', message: t('content.video_desc.pass', lang, { total: subpages.length }) }
       );
     }
@@ -288,7 +288,7 @@ function checkReferenceSite(
     if (subpages.length > 0) {
       const ratio = thinEntries / subpages.length;
       items.push(ratio > 0.5
-        ? { name: t('item.content.reference_entry', lang), status: 'warn', message: t('content.reference_entry.warn', lang, { thin: thinEntries, total: subpages.length }), detail: thinPages.slice(0, 5).join(', ') }
+        ? { name: t('item.content.reference_entry', lang), status: 'warn', message: t('content.reference_entry.warn', lang, { thin: thinEntries, total: subpages.length }), detailList: thinPages.slice(0, 5).map(p => `${new URL(p).pathname}`) }
         : { name: t('item.content.reference_entry', lang), status: 'pass', message: t('content.reference_entry.pass', lang) }
       );
     }

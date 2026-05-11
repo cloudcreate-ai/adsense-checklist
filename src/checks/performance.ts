@@ -12,14 +12,16 @@ export async function checkPerformance(page: Page, url: string, browser: Browser
     const ms = Date.now() - start;
     const sec = (ms / 1000).toFixed(1);
     if (ms < 3000) items.push({ name: t('item.perf.speed', lang), status: 'pass', message: t('perf.speed.pass', lang, { time: sec }) });
-    else if (ms < 6000) items.push({ name: t('item.perf.speed', lang), status: 'warn', message: t('perf.speed.warn', lang, { time: sec }) });
-    else items.push({ name: t('item.perf.speed', lang), status: 'fail', message: t('perf.speed.fail', lang, { time: sec }) });
+    else items.push({ name: t('item.perf.speed', lang), status: 'warn', message: t('perf.speed.warn', lang, { time: sec }) });
   } catch {
     items.push({ name: t('item.perf.speed', lang), status: 'fail', message: t('perf.speed.timeout', lang) });
   }
 
   // Viewport
-  const hasViewport = await page.evaluate(() => !!document.querySelector('meta[name="viewport"]'));
+  let hasViewport = false;
+  try {
+    hasViewport = await page.evaluate(() => !!document.querySelector('meta[name="viewport"]'));
+  } catch { /* page may have navigated */ }
   items.push({ name: 'Viewport', status: hasViewport ? 'pass' : 'warn', message: t(hasViewport ? 'perf.viewport.pass' : 'perf.viewport.warn', lang) });
 
   // Mobile test
@@ -39,12 +41,17 @@ export async function checkPerformance(page: Page, url: string, browser: Browser
   }
 
   // Popups
-  const popups = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('[class*="modal"],[class*="popup"],[class*="overlay"],[id*="modal"],[id*="popup"]')).filter(el => {
-      const s = getComputedStyle(el);
-      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
-    }).length;
-  });
+  let popups = 0;
+  try {
+    popups = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('[class*="modal"],[class*="popup"],[class*="overlay"],[id*="modal"],[id*="popup"]')).filter(el => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+      }).length;
+    });
+  } catch {
+    // page may have navigated, skip popup detection
+  }
   items.push({ name: t('item.perf.popup', lang), status: popups > 0 ? 'warn' : 'pass', message: t(popups > 0 ? 'perf.popup.warn' : 'perf.popup.pass', lang, { count: popups }) });
 
   return { name: t('cat.performance', lang), items };

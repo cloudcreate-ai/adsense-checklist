@@ -406,6 +406,9 @@ export function renderMarkdownReport(report: CheckReport): string {
     for (const item of cat.items) {
       lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
       if (item.detail) lines.push(`  - ${item.detail}`);
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(`  - ${d}`);
+      }
     }
   }
   lines.push('');
@@ -419,9 +422,9 @@ export function renderMarkdownReport(report: CheckReport): string {
     lines.push(`- **${cat.name}**: ${score}%`);
     for (const item of cat.items) {
       lines.push(`  - ${MD_ICONS[item.status]} ${item.name}: ${item.message}`);
-      if (item.detail) lines.push(`    - ${item.detail}`);
+      if (item.detail) lines.push(`  - ${item.detail}`);
       if (item.detailList) {
-        for (const d of item.detailList) lines.push(`    - ${d}`);
+        for (const d of item.detailList) lines.push(`  - ${d}`);
       }
     }
   }

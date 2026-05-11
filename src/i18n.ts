@@ -105,8 +105,9 @@ const en: Record<string, string> = {
 
   // Required pages messages
   'pages.found': 'Found {name} page ({path})',
-  'pages.missing_required': '{name} page not found (required)',
+  'pages.missing_required': '{name} page not found (recommended — AdSense doesnʹt strictly require)',
   'pages.missing_optional': '{name} page not found (recommended)',
+  'pages.missing_recommended': '{name} page not found (recommended)',
 
   // Structure messages
   'structure.h1.pass': 'Page has exactly one H1 tag',
@@ -119,7 +120,8 @@ const en: Record<string, string> = {
   'structure.links.pass': 'Homepage has {count} internal links',
   'structure.links.warn': 'Homepage has only {count} internal links (recommend more navigation)',
   'structure.deadlinks.pass': 'No broken links detected',
-  'structure.deadlinks.fail': '{count} broken link(s) detected',
+  'structure.deadlinks.warn': '{count} broken link(s) detected',
+  'structure.deadlinks.fail': '{count} broken link(s) detected (excessive)',
 
   // Performance messages
   'perf.speed.pass': 'Load time {time}s',
@@ -389,8 +391,9 @@ const zh: Record<string, string> = {
 
   // 必要页面消息
   'pages.found': '找到 {name} 页面 ({path})',
-  'pages.missing_required': '未找到 {name} 页面（必需）',
+  'pages.missing_required': '未找到 {name} 页面（建议添加 — AdSense 不强制要求）',
   'pages.missing_optional': '未找到 {name} 页面（建议添加）',
+  'pages.missing_recommended': '未找到 {name} 页面（建议添加）',
 
   // 结构消息
   'structure.h1.pass': '页面有且仅有一个 H1 标签',
@@ -403,7 +406,7 @@ const zh: Record<string, string> = {
   'structure.links.pass': '首页有 {count} 个内部链接',
   'structure.links.warn': '首页仅 {count} 个内部链接（建议增加导航链接）',
   'structure.deadlinks.pass': '未检测到死链',
-  'structure.deadlinks.fail': '检测到 {count} 个死链',
+  'structure.deadlinks.warn': '检测到 {count} 个死链',
 
   // 性能消息
   'perf.speed.pass': '加载时间 {time}s',
