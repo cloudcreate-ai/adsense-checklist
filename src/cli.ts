@@ -149,6 +149,7 @@ program
         const o = analysis.originalityScore ?? 5;
         const r = analysis.relevanceScore ?? 5;
         const c = analysis.complianceScore ?? 5;
+        const t = analysis.translationScore ?? 5;
 
         const dimColor = (s: number) => s >= 8 ? chalk.green : s >= 5 ? chalk.yellow : chalk.red;
         const scoreColor = score >= 70 ? chalk.green : score >= 40 ? chalk.yellow : chalk.red;
@@ -167,6 +168,7 @@ program
         lines.push(`  ${dimColor(o)('Originality')}  ${o}/10`);
         lines.push(`  ${dimColor(r)('Relevance')}    ${r}/10`);
         lines.push(`  ${dimColor(c)('Compliance')}   ${c}/10`);
+        lines.push(`  ${dimColor(t)('Translation')}  ${t}/10`);
         lines.push('');
         lines.push(chalk.bold(`  Overall: ${scoreColor(score + '/100')}`) + chalk.gray(' (geometric mean)'));
         lines.push('');
@@ -184,7 +186,7 @@ program
             url: pageUrl,
             title: data.title,
             topic: siteTopic,
-            scores: { value: v, originality: o, relevance: r, compliance: c },
+            scores: { value: v, originality: o, relevance: r, compliance: c, translation: t },
             overall: score,
             relevanceLabel: analysis.relevance,
             assessment: analysis.assessment,

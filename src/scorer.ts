@@ -110,7 +110,8 @@ export function computePageAiScore(analysis: PageAiAnalysis): number {
   const o = analysis.originalityScore ?? 5;
   const r = analysis.relevanceScore ?? 5;
   const c = analysis.complianceScore ?? 5;
-  const geoMean = Math.pow(v * o * r * c, 0.25);
+  const t = analysis.translationScore ?? 5;
+  const geoMean = Math.pow(v * o * r * c * t, 0.2);
   return Math.round(geoMean * 10);
 }
 

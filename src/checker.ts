@@ -1,4 +1,4 @@
-import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic } from './types.js';
+import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic, PageType } from './types.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls, isContentUrl } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
@@ -9,7 +9,7 @@ import { analyzeWithAI, analyzeBatch, analyzeOverall, type PageAiAnalysis } from
 import { estimateByRules, summarizeFinal } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
-import { classifyPage } from './classifier.js';
+import { classifyPage, PAGE_TYPE_WEIGHTS } from './classifier.js';
 import { scorePage, scoreCategory, computeCompositeScore } from './scorer.js';
 import { t } from './i18n.js';
 
@@ -55,7 +55,7 @@ function extractMainContent(text: string, allPageTexts: string[]): string {
   }).join('\n\n');
 }
 
-function buildPageDetails(pages: Array<{ url: string; text: string; title: string }>, aiAnalyses: PageAiAnalysis[], siteType: SiteType): PageDetail[] {
+function buildPageDetails(pages: Array<{ url: string; text: string; title: string; lang: string }>, aiAnalyses: PageAiAnalysis[], siteType: SiteType): PageDetail[] {
   const allTexts = pages.map(p => p.text);
   const aiMap = new Map(aiAnalyses.map(a => [a.url, a]));
   return pages.map(page => {
@@ -77,7 +77,7 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
       if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
     }
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
-    const detail: PageDetail = { url: page.url, title: page.title, pageType, totalChars, contentChars, contentRatio, contentStatus, issues, score };
+    const detail: PageDetail = { url: page.url, title: page.title, pageType, pageLanguage: page.lang, totalChars, contentChars, contentRatio, contentStatus, issues, score };
     if (relevance) detail.relevance = relevance;
     if (ai) detail.ai = {
       status: ai.status,
@@ -85,6 +85,7 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
       originalityScore: ai.originalityScore,
       relevanceScore: ai.relevanceScore,
       complianceScore: ai.complianceScore,
+      translationScore: ai.translationScore,
       assessment: ai.assessment,
       suggestions: ai.suggestions,
     };
@@ -183,7 +184,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
           timing.start('ai-topic');
           progress('AI: analyzing site topic...');
           siteTopic = await analyzeSiteTopic(
-            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText, metaInfo: homeData.metaInfo },
+            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText, metaInfo: homeData.pageInfo },
             lang,
             apiKeyResolved
           );
@@ -193,8 +194,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       } catch {}
     }
 
-    const pages: Array<{ url: string; text: string; title: string; links: string[] }> = [
-      { url: homeData.url, text: homeData.text, title: homeData.title, links: homeData.links },
+    const pages: Array<{ url: string; text: string; title: string; links: string[]; lang: string }> = [
+      { url: homeData.url, text: homeData.text, title: homeData.title, links: homeData.links, lang: homeData.pageInfo?.lang ?? 'en' },
     ];
     const allSignals: PageSignals[] = [homeData.signals];
 
@@ -210,12 +211,21 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     });
     const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin && isContentUrl(u); } catch { return false; } });
     const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
-    const uniqueLinks = allInternal.slice(0, phase1Limit);
+
+    // Normalize URLs before dedup (strip trailing slash, hash) to avoid
+    // different URL strings resolving to the same page during concurrent crawl
+    const normalizeUrl = (u: string) => u.replace(/\/+$/, '').split('#')[0];
+    const dedupedMap = new Map<string, string>();
+    for (const link of allInternal) {
+      const norm = normalizeUrl(link);
+      if (!dedupedMap.has(norm)) dedupedMap.set(norm, link);
+    }
+    const uniqueLinks = [...dedupedMap.values()].slice(0, phase1Limit);
 
     const deadLinks: string[] = [];
     const crawledUrls = new Set([homeData.url.replace(/\/+$/, '')]);
 
-    async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[] } | null> {
+    async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[]; lang: string } | null> {
       const norm = link.replace(/\/+$/, '').split('#')[0];
       if (crawledUrls.has(norm)) return null;
       crawledUrls.add(norm);
@@ -229,7 +239,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         }
         crawledUrls.add(postNorm);
         if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); await pg.close(); return null; }
-        const result = { url: data.url, text: data.text, title: data.title, links: data.links };
+        const result = { url: data.url, text: data.text, title: data.title, links: data.links, lang: data.pageInfo?.lang ?? 'en' };
         allSignals.push(data.signals);
         await pg.close();
         return result;
@@ -242,9 +252,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     let totalCrawled = 0;
     let crawlBatchNum = 0;
 
-    async function launchAIBatch(batchPages: Array<{ url: string; text: string; title: string; links: string[] }>) {
+    async function launchAIBatch(batchPages: Array<{ url: string; text: string; title: string; links: string[]; lang: string }>) {
       if (skipAi || !apiKeyResolved || batchPages.length === 0) return;
-      const p = analyzeBatch(batchPages, lang, apiKeyResolved, siteTopic, progress);
+      const p = analyzeBatch(batchPages.map(p => ({ url: p.url, text: p.text, lang: p.lang })), lang, apiKeyResolved, siteTopic, progress);
       aiPromises.push(p.then(results => { aiAnalyses.push(...results); }));
     }
 
@@ -256,6 +266,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Crawl initial batch in concurrent chunks, feeding pages to AI as they complete
     const phase1Chunks = chunkArray(uniqueLinks, concurrency);
+    let phase1Crawled = 0;
     progress(`Crawling ${uniqueLinks.length} pages (${phase1Chunks.length} batches, ${concurrency} concurrent)...`);
 
     // Send homepage (already in pages) to AI before crawl loop
@@ -264,11 +275,13 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     timing.start('phase1-crawl');
     for (const chunk of phase1Chunks) {
       crawlBatchNum++;
-      const beforeCount = pages.length;
       // Crawl chunk concurrently
-      const results = await Promise.all(chunk.map((link, i) => {
-        totalCrawled++;
-        return crawlPage(link).then(r => { progress(`Crawling: [${totalCrawled}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`); return r; });
+      const results = await Promise.all(chunk.map(link => {
+        return crawlPage(link).then(r => {
+          if (r) phase1Crawled++;
+          progress(`Crawling: [${phase1Crawled}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
+          return r;
+        });
       }));
       const newPages = results.filter((r): r is NonNullable<typeof r> => r !== null);
       pages.push(...newPages);
@@ -277,77 +290,73 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     }
     timing.end();
 
-    // Discover content pages (recursively through listing pages)
-    const CHILDREN_PER_LISTING = 10;
-    const MAX_DISCOVERY_DEPTH = 3;
-    const discoveredContent = new Set<string>();
+    // Pages already successfully crawled (non-null results)
+    const uniquePagesForSampling = pages.map(p => p.url.replace(/\/+$/, '').split('#')[0]);
 
-    timing.start('phase2-discovery');
-    // BFS discovery: follow listing pages up to MAX_DISCOVERY_DEPTH
-    const discoveryQueue: Array<{ url: string; links: string[]; depth: number }> =
-      pages.map(p => ({ url: p.url, links: p.links, depth: 0 }));
-    const seenInDiscovery = new Set<string>([...crawledUrls].map(u => u.replace(/\/+$/, '').split('#')[0]));
+    // Stratified sampling: classify all URLs, pick required pages first, then distribute remaining budget by type
+    const classifiedUrls = allInternal.map(u => ({ url: u, type: classifyPage(u) }));
 
-    while (discoveryQueue.length > 0) {
-      const current = discoveryQueue.shift()!;
-      if (current.depth > MAX_DISCOVERY_DEPTH) continue;
-      const children = discoverChildLinks(current.url, current.links, origin, CHILDREN_PER_LISTING);
-      for (const child of children) {
-        const norm = child.replace(/\/+$/, '');
-        if (seenInDiscovery.has(norm)) continue;
-        seenInDiscovery.add(norm);
-        const pt = classifyPage(child);
-        if (pt === 'listing') {
-          if (current.depth < MAX_DISCOVERY_DEPTH) {
-            // Will discover their links when we crawl them
-          }
-        } else {
-          discoveredContent.add(child);
-        }
+    // Always-crawl: homepage + required pages
+    const requiredTypes = new Set<PageType>(['required']);
+    const alwaysUrls = new Set<string>();
+    alwaysUrls.add(homeData.url.replace(/\/+$/, '')); // homepage
+    for (const c of classifiedUrls) {
+      if (requiredTypes.has(c.type)) alwaysUrls.add(normalizeUrl(c.url));
+    }
+
+    // Group remaining URLs by type
+    const typeGroups = new Map<string, string[]>();
+    for (const c of classifiedUrls) {
+      const norm = normalizeUrl(c.url);
+      if (alwaysUrls.has(norm)) continue;
+      if (c.type === 'utility' || c.type === 'unknown') continue; // skip low-value types
+      const group = typeGroups.get(c.type) ?? [];
+      group.push(c.url);
+      typeGroups.set(c.type, group);
+    }
+
+    // Distribute remaining budget proportionally by weight × count
+    const alwaysCount = Math.min(alwaysUrls.size, uniqueLinks.length); // some may already be in pages
+    const remainingBudget = Math.max(0, maxCrawl - Math.max(uniquePagesForSampling.length, alwaysCount));
+
+    const weightedTypes = [...typeGroups.entries()]
+      .map(([type, urls]) => ({ type, urls, weight: PAGE_TYPE_WEIGHTS[type as keyof typeof PAGE_TYPE_WEIGHTS] ?? 3 }))
+      .sort((a, b) => b.weight - a.weight);
+
+    const totalWeight = weightedTypes.reduce((s, t) => s + t.weight * t.urls.length, 0);
+    const sampledFromTypes = new Set<string>();
+    if (totalWeight > 0 && remainingBudget > 0) {
+      for (const t of weightedTypes) {
+        const budgetShare = Math.max(1, Math.round((t.weight * t.urls.length / totalWeight) * remainingBudget));
+        const sorted = sortByFreshness(t.urls);
+        const toTake = Math.min(budgetShare, sorted.length);
+        for (const u of sorted.slice(0, toTake)) sampledFromTypes.add(normalizeUrl(u));
       }
     }
 
-    // Also add sitemap content pages that weren't crawled yet
-    for (const smUrl of sitemapInternal) {
-      const norm = smUrl.replace(/\/+$/, '');
-      if (!crawledUrls.has(norm) && !discoveredContent.has(norm)) {
-        const pt = classifyPage(smUrl);
-        if (pt !== 'listing') {
-          discoveredContent.add(smUrl);
-        }
+    // Build final URL list: always-crawl + sampled, deduplicated, capped
+    const finalUrlSet = new Set<string>();
+    for (const u of alwaysUrls) finalUrlSet.add(u);
+    for (const u of sampledFromTypes) finalUrlSet.add(u);
+    const finalUrls = [...finalUrlSet].slice(0, maxCrawl);
+
+    // Crawl remaining URLs that haven't been crawled yet
+    const toCrawl = finalUrls.filter(u => !crawledUrls.has(u));
+    if (toCrawl.length > 0) {
+      const crawlChunks = chunkArray(toCrawl, concurrency);
+      timing.start('phase2-crawl');
+      progress(`Crawling ${toCrawl.length} additional pages (${crawlChunks.length} batches)...`);
+      for (const chunk of crawlChunks) {
+        const results = await Promise.all(chunk.map(link => crawlPage(link).then(r => {
+          if (r) progress(`Crawling: ${new URL(link).pathname}`);
+          return r;
+        })));
+        const newPages = results.filter((r): r is NonNullable<typeof r> => r !== null);
+        pages.push(...newPages);
+        await launchAIBatch(newPages);
       }
+      timing.end();
     }
-    timing.end();
-
-    // Sort by freshness (newest first) then take maxContent, capped by remaining crawl budget
-    const remainingBudget = Math.max(0, maxCrawl - crawledUrls.size);
-    const phase2Limit = Math.min(maxContent, remainingBudget);
-    const sortedContent = sortByFreshness([...discoveredContent]);
-    const toCrawl = sortedContent.slice(0, phase2Limit);
-    if (toCrawl.length > 0) progress(`Discovering content pages: ${toCrawl.length} to crawl (from ${discoveredContent.size} discovered)...`);
-
-    // Phase 2: crawl discovered content pages in concurrent chunks, feeding to AI
-    const phase2Chunks = chunkArray(toCrawl, concurrency);
-    timing.start('phase2-crawl');
-    for (const chunk of phase2Chunks) {
-      // Crawl chunk concurrently
-      const results = await Promise.all(chunk.map(link => crawlPage(link).then(r => { progress(`Crawling: ${new URL(link).pathname}${new URL(link).search}`); return r; })));
-      const newPages = results.filter((r): r is NonNullable<typeof r> => r !== null);
-      pages.push(...newPages);
-      await launchAIBatch(newPages);
-
-      // After crawling, check for deeper content links
-      for (const crawledPage of newPages) {
-        const deeperChildren = discoverChildLinks(crawledPage.url, crawledPage.links, origin, CHILDREN_PER_LISTING);
-        for (const dc of deeperChildren) {
-          const dnorm = dc.replace(/\/+$/, '');
-          if (!crawledUrls.has(dnorm) && !discoveredContent.has(dnorm) && classifyPage(dc) !== 'listing') {
-            discoveredContent.add(dc);
-          }
-        }
-      }
-    }
-    timing.end();
 
     // Wait for all AI analyses to complete
     if (aiPromises.length > 0) {
@@ -436,7 +445,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         if (pageAnalyses.length === 0 && apiKeyResolved) {
           // Fallback: if pipeline didn't produce results, run analyzeWithAI
           progress(`AI analysis: ${uniquePages.length} pages...`);
-          const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic, concurrency);
+          const aiResult = await analyzeWithAI(uniquePages.map(p => ({ url: p.url, text: p.text, lang: (p as any).lang })), lang, apiKey, progress, siteTopic, concurrency);
           pageAnalyses = aiResult.pageAnalyses;
 
           // AI value analysis category (displayed in report)
@@ -516,33 +525,29 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
     const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses);
 
-    // Per-dimension averages
-    const aiDimensionAverages = pageAnalyses.length > 0 ? {
-      value: Math.round(pageAnalyses.reduce((s, a) => s + (a.valueScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
-      originality: Math.round(pageAnalyses.reduce((s, a) => s + (a.originalityScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
-      relevance: Math.round(pageAnalyses.reduce((s, a) => s + (a.relevanceScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
-      compliance: Math.round(pageAnalyses.reduce((s, a) => s + (a.complianceScore ?? 5), 0) / pageAnalyses.length * 10) / 10,
-    } : undefined;
-
-    // Per-dimension stats (avg, min, low-count)
+    // Per-dimension averages and stats (generic, iterates over all dimensions)
+    const DIMENSION_KEYS: Array<{ key: 'valueScore' | 'originalityScore' | 'relevanceScore' | 'complianceScore' | 'translationScore'; name: string }> = [
+      { key: 'valueScore', name: 'value' },
+      { key: 'originalityScore', name: 'originality' },
+      { key: 'relevanceScore', name: 'relevance' },
+      { key: 'complianceScore', name: 'compliance' },
+      { key: 'translationScore', name: 'translation' },
+    ];
     const LOW_THRESHOLD = 6;
-    const dimStats = (key: 'valueScore' | 'originalityScore' | 'relevanceScore' | 'complianceScore') => {
-      if (pageAnalyses.length === 0) return undefined;
-      const scores = pageAnalyses.map(a => a[key] ?? 5);
-      const lowCount = scores.filter(s => s < LOW_THRESHOLD).length;
-      return {
-        avg: Math.round(scores.reduce((s, v) => s + v, 0) / scores.length * 10) / 10,
-        min: Math.min(...scores),
-        lowCount,
-        lowPct: Math.round(lowCount / scores.length * 1000) / 10,
-      };
-    };
-    const aiDimensionStats = pageAnalyses.length > 0 ? {
-      value: dimStats('valueScore')!,
-      originality: dimStats('originalityScore')!,
-      relevance: dimStats('relevanceScore')!,
-      compliance: dimStats('complianceScore')!,
-    } : undefined;
+
+    const aiDimensionAverages: Record<string, number> = {};
+    const aiDimensionStats: Record<string, { avg: number; min: number; lowCount: number; lowPct: number }> = {};
+
+    if (pageAnalyses.length > 0) {
+      for (const dim of DIMENSION_KEYS) {
+        const scores = pageAnalyses.map(a => a[dim.key] ?? 5);
+        const avg = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length * 10) / 10;
+        const min = Math.min(...scores);
+        const lowCount = scores.filter(s => s < LOW_THRESHOLD).length;
+        aiDimensionAverages[dim.name] = avg;
+        aiDimensionStats[dim.name] = { avg, min, lowCount, lowPct: Math.round(lowCount / scores.length * 1000) / 10 };
+      }
+    }
 
     // Rule-based approval probability (always computed)
     const partialReport: CheckReport = {

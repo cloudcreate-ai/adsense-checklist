@@ -8,11 +8,12 @@ export interface PageAiAnalysis {
   url: string;
   status: 'pass' | 'warn' | 'fail';
   relevance?: 'relevant' | 'tangential' | 'off-topic';
-  // Four-dimension scores (0-10)
+  // Five-dimension scores (0-10)
   valueScore?: number;
   originalityScore?: number;
   relevanceScore?: number;
   complianceScore?: number;
+  translationScore?: number;
   assessment: string;
   suggestions: string[];
   // AI-inferred page type (overrides URL-based classification when AI is enabled)
@@ -105,7 +106,8 @@ export async function analyzeSinglePage(
   page: { url: string; text: string },
   langName: string,
   date: string,
-  siteTopic?: SiteTopic
+  siteTopic?: SiteTopic,
+  pageLanguage?: string
 ): Promise<PageAiAnalysis> {
   const content = page.text.slice(0, PAGE_CHARS);
 
@@ -113,7 +115,7 @@ export async function analyzeSinglePage(
     ? `\nSite topic: ${siteTopic.topic}\nSite type: ${siteTopic.type}\nSite description: ${siteTopic.description}`
     : '';
 
-  const prompt = `You are a Google AdSense review expert. Analyze this page and score it on four dimensions.
+  const prompt = `You are a Google AdSense review expert. Analyze this page and score it on five dimensions.
 Current date: ${date}
 Reply language: ${langName}
 ${topicContext}
@@ -132,6 +134,12 @@ Score each dimension from 0 to 10:
    - If the page discusses or reports on sensitive topics (e.g., "puzzle crack" as a news headline, "betting odds" in sports analysis), this is NOT a violation.
    - Only flag actual promotion or facilitation of policy-violating content.
    - If the page appears to be a 404 error page or has minimal content, do not flag it as a compliance violation. Note it as "insufficient content for compliance review".
+5. translation (0-10): How well is the page content translated into its declared language?
+   Declared language: ${pageLanguage || 'English'}
+   Score 10 = content is fully, correctly, and naturally written in the declared language.
+   Score 0 = content is completely untranslated or machine-translated gibberish.
+   Check for: mixed-language content (e.g., Japanese page with English paragraphs), awkward machine translation artifacts, unlocalized technical terms left in another language.
+   If the declared language is the default (English) or not set, score 10 automatically.
 
 Also classify the page type based on its content and purpose. Choose ONE:
 - "homepage": The site's main landing page
@@ -144,11 +152,11 @@ Also classify the page type based on its content and purpose. Choose ONE:
 - "utility": Search, Login, Signup, Download, 404, or functional tool pages
 
 IMPORTANT — special handling for "required" and "utility" pages:
-These pages are necessary for site operation. Do NOT penalize them for low value, originality, or relevance.
-- For "required" pages (Privacy, Terms, About, Contact, Legal): set value=10, originality=10, relevance=10 automatically.
+These pages are necessary for site operation. Do NOT penalize them for low value, originality, relevance, or translation.
+- For "required" pages (Privacy, Terms, About, Contact, Legal): set value=10, originality=10, relevance=10, translation=10 automatically.
 - Only score compliance normally. Check if the page has reasonable content (not empty or placeholder).
-- For "utility" pages (Search, Login, 404): same rule — set value=10, originality=10, relevance=10, only evaluate compliance and basic completeness.
-- For all other page types (homepage, listing, content, game_detail, video_detail, reference_detail): score all four dimensions normally.
+- For "utility" pages (Search, Login, 404): same rule — set value=10, originality=10, relevance=10, translation=10, only evaluate compliance and basic completeness.
+- For all other page types (homepage, listing, content, game_detail, video_detail, reference_detail): score all five dimensions normally.
 
 Page: ${page.url}
 
@@ -162,6 +170,7 @@ Reply in ${langName} with JSON:
   "relevance": <0-10>,
   "relevanceLabel": "relevant|tangential|off-topic",
   "compliance": <0-10>,
+  "translation": <0-10>,
   "pageType": "homepage|listing|content|game_detail|video_detail|reference_detail|required|utility",
   "assessment": "Brief assessment covering the key findings across all dimensions",
   "suggestions": ["Specific actionable suggestion to improve this page"]
@@ -174,21 +183,26 @@ Reply in ${langName} with JSON:
     const originalityScore = clampScore(result.originality);
     const relevanceScore = clampScore(result.relevance);
     const complianceScore = clampScore(result.compliance);
+    const translationScore = clampScore(result.translation);
     const validPageTypes: PageType[] = ['homepage', 'listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility'];
     const inferredPageType = validPageTypes.includes(result.pageType) ? result.pageType : undefined;
 
-    // For required/utility pages, don't penalize for low value/originality/relevance
+    // For required/utility pages, don't penalize for low value/originality/relevance/translation
     let finalValueScore = valueScore;
     let finalOriginalityScore = originalityScore;
     let finalRelevanceScore = relevanceScore;
+    let finalTranslationScore = translationScore;
     if (inferredPageType === 'required' || inferredPageType === 'utility') {
       finalValueScore = 10;
       finalOriginalityScore = 10;
       finalRelevanceScore = 10;
+      finalTranslationScore = 10;
+    } else if (!pageLanguage || pageLanguage === 'en') {
+      finalTranslationScore = 10;
     }
 
-    // Overall status based on geometric mean
-    const geoMean = Math.pow(finalValueScore * finalOriginalityScore * finalRelevanceScore * complianceScore, 0.25);
+    // Overall status based on geometric mean of 5 dimensions
+    const geoMean = Math.pow(finalValueScore * finalOriginalityScore * finalRelevanceScore * complianceScore * finalTranslationScore, 0.2);
     const status: 'pass' | 'warn' | 'fail' = geoMean >= 7 ? 'pass' : geoMean >= 4 ? 'warn' : 'fail';
     return {
       url: page.url,
@@ -198,6 +212,7 @@ Reply in ${langName} with JSON:
       originalityScore: finalOriginalityScore,
       relevanceScore: finalRelevanceScore,
       complianceScore,
+      translationScore: finalTranslationScore,
       assessment: result.assessment ?? '',
       suggestions: result.suggestions ?? [],
       inferredPageType,
@@ -294,7 +309,7 @@ export async function analyzeOverall(
   date: string
 ): Promise<{ suggestions: string[] }> {
   const summaries = pageAnalyses.map((p, i) =>
-    `Page ${i + 1} (${p.url}): [${p.status}] value=${p.valueScore} originality=${p.originalityScore} relevance=${p.relevanceScore} compliance=${p.complianceScore} — ${p.assessment.slice(0, 150)}`
+    `Page ${i + 1} (${p.url}): [${p.status}] value=${p.valueScore} originality=${p.originalityScore} relevance=${p.relevanceScore} compliance=${p.complianceScore} translation=${p.translationScore} — ${p.assessment.slice(0, 150)}`
   ).join('\n');
 
   const prompt = `You are a Google AdSense review expert. Based on per-page dimension scores below, give site-wide improvement suggestions.
@@ -327,7 +342,7 @@ Based on these results, provide improvement suggestions in ${langName} with JSON
  * Used by pipeline mode where crawling and AI overlap.
  */
 export async function analyzeBatch(
-  pages: Array<{ url: string; text: string }>,
+  pages: Array<{ url: string; text: string; lang?: string }>,
   lang: string,
   apiKey: string,
   siteTopic?: SiteTopic,
@@ -338,11 +353,11 @@ export async function analyzeBatch(
   const progress = onProgress ?? (() => {});
   const paths = pages.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } });
   progress(`AI: analyzing ${pages.length} page(s) (${paths.join(', ')})`);
-  return Promise.all(pages.map(p => analyzeSinglePage(p, langName, date, siteTopic)));
+  return Promise.all(pages.map(p => analyzeSinglePage(p, langName, date, siteTopic, p.lang)));
 }
 
 export async function analyzeWithAI(
-  pages: Array<{ url: string; text: string }>,
+  pages: Array<{ url: string; text: string; lang?: string }>,
   lang: string = 'en',
   apiKey?: string,
   onProgress?: (message: string) => void,
@@ -368,7 +383,7 @@ export async function analyzeWithAI(
       const totalBatches = Math.ceil(pages.length / concurrency);
       progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
-        batch.map(p => analyzeSinglePage(p, langName, date, siteTopic))
+        batch.map(p => analyzeSinglePage(p, langName, date, siteTopic, p.lang))
       );
       pageAnalyses.push(...results);
     }

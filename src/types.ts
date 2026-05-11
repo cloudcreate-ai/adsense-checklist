@@ -23,6 +23,7 @@ export interface PageDetail {
   url: string;
   title: string;
   pageType: PageType;
+  pageLanguage: string;     // extracted from <html lang> or meta content-language
   totalChars: number;
   contentChars: number;
   contentRatio: number;
@@ -36,6 +37,7 @@ export interface PageDetail {
     originalityScore?: number;
     relevanceScore?: number;
     complianceScore?: number;
+    translationScore?: number;    // 0-10 translation quality
     assessment: string;
     suggestions: string[];
   };
@@ -87,18 +89,13 @@ export interface CheckReport {
   warningRatio: number;            // 0-1
   warningPenalty: number;          // points deducted
   siteAiScore: number;             // 0-100 AI value score (geometric mean, page-type weighted)
-  aiDimensionAverages?: {          // per-dimension averages across all analyzed pages (0-10)
-    value: number;
-    originality: number;
-    relevance: number;
-    compliance: number;
-  };
-  aiDimensionStats?: {             // per-dimension stats with min and low-count
-    value: { avg: number; min: number; lowCount: number; lowPct: number };
-    originality: { avg: number; min: number; lowCount: number; lowPct: number };
-    relevance: { avg: number; min: number; lowCount: number; lowPct: number };
-    compliance: { avg: number; min: number; lowCount: number; lowPct: number };
-  };
+  aiDimensionAverages?: Record<string, number>; // per-dimension averages across all analyzed pages (0-10)
+  aiDimensionStats?: Record<string, {           // per-dimension stats with min and low-count
+    avg: number;
+    min: number;
+    lowCount: number;
+    lowPct: number;
+  }>;
   approvalEstimate?: {             // rule-based approval probability (always computed)
     probability: number;
     confidence: 'high' | 'medium' | 'low';

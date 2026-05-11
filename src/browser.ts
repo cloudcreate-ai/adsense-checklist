@@ -82,10 +82,13 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
   });
   const title = await page.title();
 
-  const metaInfo = await page.evaluate(() => ({
+  const pageInfo = await page.evaluate(() => ({
     description: document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '',
     ogDescription: document.querySelector('meta[property="og:description"]')?.getAttribute('content') ?? '',
     h1: Array.from(document.querySelectorAll('h1')).map(h => h.textContent?.trim() ?? '').join(' '),
+    lang: document.documentElement.getAttribute('lang') ??
+          document.querySelector('meta[http-equiv="content-language"]')?.getAttribute('content') ??
+          'en',
   }));
 
   const signals: PageSignals = await page.evaluate(() => {
@@ -122,7 +125,7 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
     };
   });
 
-  return { status, content, text, links, linkDetails, navText, footerText, title, url: urlAfterRender, signals, metaInfo };
+  return { status, content, text, links, linkDetails, navText, footerText, title, url: urlAfterRender, signals, pageInfo };
 }
 
 export async function extractLinks(page: Page): Promise<string[]> {
