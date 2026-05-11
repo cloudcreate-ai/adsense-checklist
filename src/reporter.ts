@@ -192,7 +192,7 @@ export function renderTerminalReport(report: CheckReport): string {
       const dim = s[key];
       const c = dim.min < 4 ? chalk.red : dim.min < 6 ? chalk.yellow : chalk.green;
       const lowText = dim.lowCount > 0 ? chalk.red(`  ${dim.lowCount}/${totalPages}, ${dim.lowPct}%`) : '';
-      return `  │    ${c(`${t(`reporter.dim_${key}`, lang)} 均${dim.avg} 最低${dim.min}`)}${lowText}`;
+      return `  │    ${c(`${t(`reporter.dim_${key}`, lang)} ${t('reporter.dim_avg_label', lang)}${dim.avg} ${t('reporter.dim_min_label', lang)}${dim.min}`)}${lowText}`;
     };
     lines.push(chalk.gray(`  │  ${t('reporter.dim_stats_label', lang)}:`));
     lines.push(chalk.gray(dimStatLine('value')));
