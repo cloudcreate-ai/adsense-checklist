@@ -98,6 +98,19 @@ export interface CheckReport {
     relevance: { avg: number; min: number; lowCount: number; lowPct: number };
     compliance: { avg: number; min: number; lowCount: number; lowPct: number };
   };
+  approvalEstimate?: {             // rule-based approval probability (always computed)
+    probability: number;
+    confidence: 'high' | 'medium' | 'low';
+    keyFactors: string[];
+  };
+  expertSummary?: {                // expert AI summary (only with --ai)
+    probability: number;
+    verdict: string;
+    reasons: string[];
+    topActions: string[];
+    detailedSummary: string;
+    modelName: string;
+  };
 }
 
 export interface CheckOptions {

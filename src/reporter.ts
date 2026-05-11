@@ -89,6 +89,29 @@ export function renderTerminalReport(report: CheckReport): string {
   }
   lines.push('');
 
+  // ── Approval Probability ──
+  const est = report.approvalEstimate;
+  const exp = report.expertSummary;
+  if (est || exp) {
+    const probVal = exp?.probability ?? est?.probability ?? 0;
+    const probColor = probVal >= 70 ? chalk.green : probVal >= 40 ? chalk.yellow : chalk.red;
+    lines.push(chalk.bold(`  ${t('report.approval_title', lang)}`));
+
+    if (est) {
+      const confLabel = t('report.approval_confidence', lang, { level: t(`conf.${est.confidence}`, lang) });
+      lines.push(`  ${t('report.approval_mechanical', lang)}: ${probColor(t('report.approval_prob', lang, { prob: est.probability }))} (${chalk.gray(confLabel)})`);
+      if (est.keyFactors.length > 0) {
+        lines.push(`  ${est.keyFactors.slice(0, 3).map(f => chalk.gray(`    · ${f}`)).join('\n')}`);
+      }
+    }
+
+    if (exp) {
+      lines.push(`  ${t('report.approval_expert', lang)}: ${probColor(t('report.approval_prob', lang, { prob: exp.probability }))} (${chalk.gray(exp.modelName)}) — ${chalk.gray(exp.detailedSummary.length > 60 ? exp.detailedSummary.slice(0, 57) + '...' : exp.detailedSummary)}`);
+    }
+
+    lines.push('');
+  }
+
   // ── Hard Requirements ──
   const hardColor = report.hardStatus === 'ready' ? chalk.green : report.hardStatus === 'warn' ? chalk.yellow : chalk.red;
   const hardLabel = report.hardStatus === 'ready' ? 'PASS' : report.hardStatus === 'warn' ? 'WARN' : 'FAIL';
@@ -301,6 +324,43 @@ export function renderMarkdownReport(report: CheckReport): string {
     lines.push(t('md.summary.ready', lang));
   }
   lines.push('');
+
+  // Approval probability
+  const est = report.approvalEstimate;
+  const exp = report.expertSummary;
+  if (est || exp) {
+    lines.push(`## ${t('md.approval_title', lang)}`);
+    lines.push('');
+
+    if (est) {
+      lines.push(`### ${t('md.approval_mechanical_title', lang)}`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${est.probability}%`);
+      lines.push(`- **${t('md.approval_confidence', lang)}**: ${t(`conf.${est.confidence}`, lang)}`);
+      if (est.keyFactors.length > 0) {
+        lines.push(`- **${t('md.approval_factors', lang)}**:`);
+        for (const f of est.keyFactors) lines.push(`  - ${f}`);
+      }
+      lines.push('');
+    }
+
+    if (exp) {
+      lines.push(`### ${t('md.approval_expert_title', lang)} (${exp.modelName})`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${exp.probability}%`);
+      lines.push(`- **结论**: ${exp.verdict}`);
+      lines.push(`- **${t('md.approval_summary', lang)}**: ${exp.detailedSummary}`);
+      if (exp.reasons.length > 0) {
+        lines.push(`- **${t('md.approval_reasons', lang)}**:`);
+        for (const r of exp.reasons) lines.push(`  - ${r}`);
+      }
+      if (exp.topActions.length > 0) {
+        lines.push(`- **${t('md.approval_actions', lang)}**:`);
+        for (const a of exp.topActions) lines.push(`  - ${a}`);
+      }
+      lines.push('');
+    }
+  }
 
   // Hard requirements
   const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';

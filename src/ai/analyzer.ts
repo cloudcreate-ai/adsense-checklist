@@ -32,11 +32,11 @@ function getApiKey(): string | undefined {
   return process.env.AI_API_KEY;
 }
 
-function getModel(): string {
-  return process.env.AI_MODEL || 'deepseek-chat';
+function getFastModel(): string {
+  return process.env.AI_FAST_MODEL || process.env.AI_MODEL || 'deepseek-chat';
 }
 
-async function callAI(prompt: string, maxTokens: number = 4096): Promise<string> {
+async function callAI(prompt: string, maxTokens: number = 4096, model?: string): Promise<string> {
   const response = await fetch(getApiEndpoint(), {
     method: 'POST',
     headers: {
@@ -44,7 +44,7 @@ async function callAI(prompt: string, maxTokens: number = 4096): Promise<string>
       Authorization: `Bearer ${getApiKey()}`,
     },
     body: JSON.stringify({
-      model: getModel(),
+      model: model || getFastModel(),
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -58,12 +58,20 @@ async function callAI(prompt: string, maxTokens: number = 4096): Promise<string>
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-function extractJson(text: string): any {
+export function extractJson(text: string): any {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     return JSON.parse(jsonMatch[0]);
   }
   throw new Error('No JSON found in response');
+}
+
+export function getExpertModel(): string {
+  return process.env.AI_EXPERT_MODEL || process.env.AI_MODEL || 'claude-sonnet-4-6';
+}
+
+export async function callAIWithModel(prompt: string, maxTokens: number, model: string): Promise<string> {
+  return callAI(prompt, maxTokens, model);
 }
 
 const AI_LANG_NAMES: Record<string, string> = {

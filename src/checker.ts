@@ -6,6 +6,7 @@ import { checkSiteStructure } from './checks/structure.js';
 import { checkPerformance } from './checks/performance.js';
 import { checkPolicyCompliance } from './checks/policy.js';
 import { analyzeWithAI, recheckCompliance, type PageAiAnalysis } from './ai/analyzer.js';
+import { estimateByRules, summarizeByExpert } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
 import { classifyPage } from './classifier.js';
@@ -116,6 +117,7 @@ function sortByFreshness(urls: string[]): string[] {
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
   const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+  const apiKeyResolved = apiKey || process.env.AI_API_KEY;
 
   // Cap phase limits by total crawl budget
   const phase1Limit = Math.min(maxPages, maxCrawl);
@@ -136,7 +138,6 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     let siteTopic: SiteTopic | undefined;
     if (!skipAi) {
       try {
-        const apiKeyResolved = apiKey || process.env.AI_API_KEY;
         if (apiKeyResolved) {
           progress('AI: analyzing site topic...');
           siteTopic = await analyzeSiteTopic(
@@ -380,8 +381,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
         // Second-pass compliance check for suspicious pages to reduce false positives
         if (suspiciousPages.length > 0) {
-          const apiKeyResolved2 = apiKey || process.env.AI_API_KEY;
-          if (apiKeyResolved2) {
+          if (apiKeyResolved) {
             const recheckResults = await recheckCompliance(
               suspiciousPages.map(p => ({
                 url: p.url,
@@ -497,6 +497,50 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       compliance: dimStats('complianceScore')!,
     } : undefined;
 
+    // Rule-based approval probability (always computed)
+    const approvalEstimate = estimateByRules({
+      url, timestamp: new Date().toISOString(), lang, siteType,
+      siteTypeConfidence, siteTopic,
+      samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
+      categories: allCategories, hardCategories, softCategories,
+      score: allItems.filter(i => i.status === 'pass').length,
+      totalChecks: allItems.length,
+      passed: allItems.filter(i => i.status === 'pass').length,
+      warned: allItems.filter(i => i.status === 'warn').length,
+      failed: allItems.filter(i => i.status === 'fail').length,
+      skipped: allItems.filter(i => i.status === 'skip').length,
+      pages: pageDetails,
+      compositeScore, categoryScores, hardStatus, softScore,
+      warningRatio, warningPenalty, siteAiScore, aiDimensionAverages, aiDimensionStats,
+    });
+
+    // Expert AI summary (only with --ai and API key)
+    let expertSummary: CheckReport['expertSummary'] = undefined;
+    if (!skipAi && apiKeyResolved) {
+      try {
+        expertSummary = await summarizeByExpert(
+          {
+            url, timestamp: new Date().toISOString(), lang, siteType,
+            siteTypeConfidence, siteTopic,
+            samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
+            categories: allCategories, hardCategories, softCategories,
+            score: allItems.filter(i => i.status === 'pass').length,
+            totalChecks: allItems.length,
+            passed: allItems.filter(i => i.status === 'pass').length,
+            warned: allItems.filter(i => i.status === 'warn').length,
+            failed: allItems.filter(i => i.status === 'fail').length,
+            skipped: allItems.filter(i => i.status === 'skip').length,
+            pages: pageDetails,
+            compositeScore, categoryScores, hardStatus, softScore,
+            warningRatio, warningPenalty, siteAiScore, aiDimensionAverages, aiDimensionStats,
+            approvalEstimate,
+          },
+          lang,
+          new Date().toISOString().slice(0, 10)
+        ) ?? undefined;
+      } catch { /* silent */ }
+    }
+
     return {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence,
@@ -521,6 +565,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       siteAiScore,
       aiDimensionAverages,
       aiDimensionStats,
+      approvalEstimate,
+      expertSummary,
     };
   } finally {
     await browser.close();
