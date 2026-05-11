@@ -103,7 +103,15 @@ export interface CheckReport {
     confidence: 'high' | 'medium' | 'low';
     keyFactors: string[];
   };
-  expertSummary?: {                // expert AI summary (only with --ai)
+  fastSummary?: {                  // fast model final assessment (with --ai)
+    probability: number;
+    verdict: string;
+    reasons: string[];
+    topActions: string[];
+    detailedSummary: string;
+    modelName: string;
+  };
+  expertSummary?: {                // expert AI summary (only with --expert, different model)
     probability: number;
     verdict: string;
     reasons: string[];

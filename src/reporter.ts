@@ -91,10 +91,11 @@ export function renderTerminalReport(report: CheckReport): string {
 
   // ── Approval Probability ──
   const est = report.approvalEstimate;
+  const fast = report.fastSummary;
   const exp = report.expertSummary;
-  if (est || exp) {
-    const probVal = exp?.probability ?? est?.probability ?? 0;
-    const probColor = probVal >= 70 ? chalk.green : probVal >= 40 ? chalk.yellow : chalk.red;
+  if (est || fast || exp) {
+    const bestProb = exp?.probability ?? fast?.probability ?? est?.probability ?? 0;
+    const probColor = bestProb >= 70 ? chalk.green : bestProb >= 40 ? chalk.yellow : chalk.red;
     lines.push(chalk.bold(`  ${t('report.approval_title', lang)}`));
 
     if (est) {
@@ -105,9 +106,12 @@ export function renderTerminalReport(report: CheckReport): string {
       }
     }
 
+    if (fast) {
+      lines.push(`  ${t('report.approval_fast', lang)}: ${probColor(t('report.approval_prob', lang, { prob: fast.probability }))} (${chalk.gray(fast.modelName)}) — ${chalk.gray(fast.detailedSummary.length > 60 ? fast.detailedSummary.slice(0, 57) + '...' : fast.detailedSummary)}`);
+    }
+
     if (exp) {
-      const label = exp.modelName.includes('claude') || exp.modelName.includes('gpt') ? t('report.approval_expert', lang) : t('report.approval_fast', lang);
-      lines.push(`  ${label}: ${probColor(t('report.approval_prob', lang, { prob: exp.probability }))} (${chalk.gray(exp.modelName)}) — ${chalk.gray(exp.detailedSummary.length > 60 ? exp.detailedSummary.slice(0, 57) + '...' : exp.detailedSummary)}`);
+      lines.push(`  ${t('report.approval_expert', lang)}: ${probColor(t('report.approval_prob', lang, { prob: exp.probability }))} (${chalk.gray(exp.modelName)}) — ${chalk.gray(exp.detailedSummary.length > 60 ? exp.detailedSummary.slice(0, 57) + '...' : exp.detailedSummary)}`);
     }
 
     lines.push('');
@@ -328,8 +332,9 @@ export function renderMarkdownReport(report: CheckReport): string {
 
   // Approval probability
   const est = report.approvalEstimate;
+  const fast = report.fastSummary;
   const exp = report.expertSummary;
-  if (est || exp) {
+  if (est || fast || exp) {
     lines.push(`## ${t('md.approval_title', lang)}`);
     lines.push('');
 
@@ -345,12 +350,28 @@ export function renderMarkdownReport(report: CheckReport): string {
       lines.push('');
     }
 
+    if (fast) {
+      lines.push(`### ${t('md.approval_fast_title', lang)} (${fast.modelName})`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${fast.probability}%`);
+      lines.push(`- **${t('md.approval_verdict', lang)}**: ${fast.verdict}`);
+      lines.push(`- **${t('md.approval_summary', lang)}**: ${fast.detailedSummary}`);
+      if (fast.reasons.length > 0) {
+        lines.push(`- **${t('md.approval_reasons', lang)}**:`);
+        for (const r of fast.reasons) lines.push(`  - ${r}`);
+      }
+      if (fast.topActions.length > 0) {
+        lines.push(`- **${t('md.approval_actions', lang)}**:`);
+        for (const a of fast.topActions) lines.push(`  - ${a}`);
+      }
+      lines.push('');
+    }
+
     if (exp) {
-      const label = exp.modelName.includes('claude') || exp.modelName.includes('gpt') ? t('md.approval_expert_title', lang) : t('md.approval_fast_title', lang);
-      lines.push(`### ${label} (${exp.modelName})`);
+      lines.push(`### ${t('md.approval_expert_title', lang)} (${exp.modelName})`);
       lines.push('');
       lines.push(`- **${t('md.approval_probability', lang)}**: ${exp.probability}%`);
-      lines.push(`- **结论**: ${exp.verdict}`);
+      lines.push(`- **${t('md.approval_verdict', lang)}**: ${exp.verdict}`);
       lines.push(`- **${t('md.approval_summary', lang)}**: ${exp.detailedSummary}`);
       if (exp.reasons.length > 0) {
         lines.push(`- **${t('md.approval_reasons', lang)}**:`);

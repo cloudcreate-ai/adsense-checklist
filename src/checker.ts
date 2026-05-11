@@ -284,7 +284,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const recentCount = [...discoveredContent].filter(u => freshnessScore(u) >= sixMonthsAgo).length;
     const sampledCount = toCrawl.length;
     const samplePct = totalDiscovered > 0 ? Math.round((sampledCount / totalDiscovered) * 100) : 0;
-    const confidence = samplePct >= 50 ? 'high' : samplePct >= 20 ? 'medium' : 'low';
+    const confidence: 'high' | 'medium' | 'low' = samplePct >= 50 ? 'high' : samplePct >= 20 ? 'medium' : 'low';
     progress(`Pages: ${totalDiscovered} discovered, ${recentCount} recent (6mo), ${sampledCount} sampled (${samplePct}%, confidence: ${confidence})`);
 
     // Detect site type: prefer AI topic, fallback to DOM signals
@@ -498,7 +498,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     } : undefined;
 
     // Rule-based approval probability (always computed)
-    const approvalEstimate = estimateByRules({
+    const partialReport: CheckReport = {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence, siteTopic,
       samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
@@ -512,61 +512,42 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       pages: pageDetails,
       compositeScore, categoryScores, hardStatus, softScore,
       warningRatio, warningPenalty, siteAiScore, aiDimensionAverages, aiDimensionStats,
-    });
+    };
+    const approvalEstimate = estimateByRules(partialReport);
 
-    // Expert AI summary (only with --ai and API key)
+    // Fast model final assessment (always runs with --ai)
+    let fastSummary: CheckReport['fastSummary'] = undefined;
     let expertSummary: CheckReport['expertSummary'] = undefined;
     if (!skipAi && apiKeyResolved) {
       try {
-        expertSummary = await summarizeFinal(
-          {
-            url, timestamp: new Date().toISOString(), lang, siteType,
-            siteTypeConfidence, siteTopic,
-            samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
-            categories: allCategories, hardCategories, softCategories,
-            score: allItems.filter(i => i.status === 'pass').length,
-            totalChecks: allItems.length,
-            passed: allItems.filter(i => i.status === 'pass').length,
-            warned: allItems.filter(i => i.status === 'warn').length,
-            failed: allItems.filter(i => i.status === 'fail').length,
-            skipped: allItems.filter(i => i.status === 'skip').length,
-            pages: pageDetails,
-            compositeScore, categoryScores, hardStatus, softScore,
-            warningRatio, warningPenalty, siteAiScore, aiDimensionAverages, aiDimensionStats,
-            approvalEstimate,
-          },
+        fastSummary = await summarizeFinal(
+          { ...partialReport, approvalEstimate },
           lang,
           new Date().toISOString().slice(0, 10),
-          expert
+          false
         ) ?? undefined;
       } catch { /* silent */ }
+
+      // Expert model (only when --expert flag and models differ)
+      if (expert) {
+        const { getFastModel, getExpertModel } = await import('./ai/analyzer.js');
+        if (getExpertModel() !== getFastModel()) {
+          try {
+            expertSummary = await summarizeFinal(
+              { ...partialReport, approvalEstimate, fastSummary },
+              lang,
+              new Date().toISOString().slice(0, 10),
+              true
+            ) ?? undefined;
+          } catch { /* silent */ }
+        }
+      }
     }
 
     return {
-      url, timestamp: new Date().toISOString(), lang, siteType,
-      siteTypeConfidence,
-      siteTopic,
-      samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
-      categories: allCategories,
-      hardCategories,
-      softCategories,
-      score: allItems.filter(i => i.status === 'pass').length,
-      totalChecks: allItems.length,
-      passed: allItems.filter(i => i.status === 'pass').length,
-      warned: allItems.filter(i => i.status === 'warn').length,
-      failed: allItems.filter(i => i.status === 'fail').length,
-      skipped: allItems.filter(i => i.status === 'skip').length,
-      pages: pageDetails,
-      compositeScore,
-      categoryScores,
-      hardStatus,
-      softScore,
-      warningRatio,
-      warningPenalty,
-      siteAiScore,
-      aiDimensionAverages,
-      aiDimensionStats,
+      ...partialReport,
       approvalEstimate,
+      fastSummary,
       expertSummary,
     };
   } finally {
