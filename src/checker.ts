@@ -150,8 +150,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
   const apiKeyResolved = apiKey || process.env.AI_API_KEY;
   const timing = new TimingTracker();
 
-  // Cap phase limits by total crawl budget
-  const phase1Limit = Math.min(maxPages, maxCrawl);
+  // Phase 1 URL collection: gather up to maxCrawl candidates for stratified sampling
+  // (the actual crawl count is still capped by maxCrawl)
+  const phase1Limit = Math.max(maxPages, maxCrawl);
   const origin = new URL(url).origin;
   const browser = new BrowserManager();
   const progress = onProgress ?? (() => {});
