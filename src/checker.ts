@@ -209,7 +209,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         return true;
       } catch { return false; }
     });
-    const sitemapInternal = sitemapUrls.filter(u => { try { return new URL(u).origin === origin && isContentUrl(u); } catch { return false; } });
+    const sitemapInternal = sitemapUrls.filter(u => { try { const url = new URL(u); if (url.origin !== origin) return false; if (!isContentUrl(u)) return false; if (url.pathname === '/' && url.search.length > 0) return false; return true; } catch { return false; } });
     const allInternal = [...new Set([...internalLinks, ...sitemapInternal])];
 
     // Normalize URLs before dedup (strip trailing slash, hash) to avoid
