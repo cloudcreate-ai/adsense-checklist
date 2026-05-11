@@ -273,8 +273,21 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   lines.push(`       ${t('report.content_label', lang)} ${ratioColor(page.contentRatio + '%')} (${page.contentChars}/${page.totalChars})`);
   for (const issue of page.issues) lines.push(chalk.yellow(`       ! ${issue}`));
   if (page.ai) {
-    lines.push(`       ${ICONS[page.ai.status]} AI: ${truncate(page.ai.assessment, 80)}`);
-    for (const s of page.ai.suggestions.slice(0, 2)) lines.push(chalk.gray(`         -> ${truncate(s, 70)}`));
+    const d = page.ai;
+    const dimStr = (key: string, v: number) => {
+      const c = v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
+      return c(`${key}(${v})`);
+    };
+    const dims = [
+      dimStr('V', d.valueScore ?? 5),
+      dimStr('O', d.originalityScore ?? 5),
+      dimStr('R', d.relevanceScore ?? 5),
+      dimStr('C', d.complianceScore ?? 5),
+      dimStr('T', d.translationScore ?? 5),
+    ].join(' ');
+    lines.push(`       ${ICONS[d.status]} AI: ${dims}`);
+    lines.push(`       ${truncate(d.assessment, 120)}`);
+    for (const s of d.suggestions.slice(0, 2)) lines.push(chalk.gray(`         -> ${truncate(s, 70)}`));
   }
   lines.push('');
 }
@@ -501,8 +514,8 @@ export function renderMarkdownReport(report: CheckReport): string {
     );
 
     // Table header
-    lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.type', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
-    lines.push(`|------|------|------|------|--------|---|---|---|---|--------|------|`);
+    lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.type', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | T | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
+    lines.push(`|------|------|------|------|--------|---|---|---|---|---|--------|------|`);
 
     for (const p of [...problems, ...ok]) {
       const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
@@ -512,10 +525,13 @@ export function renderMarkdownReport(report: CheckReport): string {
       const o = ai?.originalityScore != null ? ai.originalityScore : '-';
       const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
       const c = ai?.complianceScore != null ? ai.complianceScore : '-';
-      const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
-        ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
-        : '-';
-      lines.push(`| ${status} | ${p.pageType} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${aiComposite} | ${p.title} |`);
+      const t_ = ai?.translationScore != null ? ai.translationScore : '-';
+      const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null && ai?.translationScore != null)
+        ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore * ai.translationScore, 0.2) * 10)
+        : ((ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
+          ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
+          : '-');
+      lines.push(`| ${status} | ${p.pageType} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${t_} | ${aiComposite} | ${p.title} |`);
     }
     lines.push('');
 
@@ -526,9 +542,12 @@ export function renderMarkdownReport(report: CheckReport): string {
       lines.push('');
       for (const p of detailPages) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-        const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
-          ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
-          : null;
+        const hasTranslation = p.ai?.translationScore != null;
+        const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null && p.ai?.translationScore != null)
+          ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore * p.ai.translationScore, 0.2) * 10)
+          : ((p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
+            ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
+            : null);
         const scoreLabels = aiComposite != null
           ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: AI ${aiComposite}/100`
           : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
@@ -539,8 +558,10 @@ export function renderMarkdownReport(report: CheckReport): string {
           const ai = p.ai;
           lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${ai.status}`);
           if (ai.valueScore != null) {
-            lines.push(`- ${t('md.four_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}**`);
-            const geoMean = Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
+            lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}**`);
+            const geoMean = hasTranslation && ai.translationScore != null
+              ? Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5) * (ai.translationScore ?? 5), 0.2) * 10)
+              : Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
             lines.push(`- ${t('md.ai_composite_score', lang)}: ${geoMean}/100（${t('md.geometric_mean', lang)}）`);
           }
           lines.push(`- ${t('md.assessment', lang)}: ${ai.assessment}`);
