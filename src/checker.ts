@@ -560,7 +560,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       compositeScore, categoryScores, hardStatus, softScore,
       warningRatio, warningPenalty, siteAiScore, aiDimensionAverages, aiDimensionStats,
     };
-    const approvalEstimate = estimateByRules(partialReport);
+    const approvalEstimate = estimateByRules(partialReport, lang);
 
     // Fast model final assessment (always runs with --ai)
     let fastSummary: CheckReport['fastSummary'] = undefined;

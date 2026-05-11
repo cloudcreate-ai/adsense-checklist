@@ -281,7 +281,7 @@ program
     const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
 
     // Mechanical estimate
-    const mech = estimateByRules(report);
+    const mech = estimateByRules(report, lang);
 
     if (opts.json) {
       const result: Record<string, unknown> = {

@@ -198,6 +198,19 @@ const en: Record<string, string> = {
   'topic.unsupported_warning': 'This site type ({type}) is not supported by AdSense checklist',
   'topic.meta_incomplete': 'Page metadata is incomplete — topic/type inferred from content analysis',
 
+  // Approval factor labels (mechanical estimate)
+  'approval.factor.composite_high': 'Composite score excellent (≥75)',
+  'approval.factor.composite_mid': 'Composite score moderate (≥50)',
+  'approval.factor.composite_low': 'Composite score low (<50)',
+  'approval.factor.hard_ready': 'All hard requirements met',
+  'approval.factor.hard_fail': 'Hard requirements have failures',
+  'approval.factor.hard_warn': 'Hard requirements have warnings',
+  'approval.factor.ai_high': 'AI site score good (≥60)',
+  'approval.factor.ai_low': 'AI site score low (<40)',
+  'approval.factor.orig_low': 'Originality dimension minimum <4',
+  'approval.factor.low_ratio_high': 'Over half of pages have low-scoring dimensions',
+  'approval.factor.balanced': 'All indicators balanced',
+
   // Reporter UI
   'reporter.site_type': 'Site type',
   'reporter.topic': 'Topic',
@@ -487,6 +500,19 @@ const zh: Record<string, string> = {
   'topic.description': '{description}',
   'topic.unsupported_warning': '该站点类型（{type}）不在 AdSense 检查支持范围内',
   'topic.meta_incomplete': '页面元数据不完整 — 主题/类型通过内容分析推断',
+
+  // 审批因素标签
+  'approval.factor.composite_high': '综合评分优秀 (≥75)',
+  'approval.factor.composite_mid': '综合评分中等 (≥50)',
+  'approval.factor.composite_low': '综合评分偏低 (<50)',
+  'approval.factor.hard_ready': '硬性要求全部通过',
+  'approval.factor.hard_fail': '硬性要求存在失败项',
+  'approval.factor.hard_warn': '硬性要求存在警告项',
+  'approval.factor.ai_high': 'AI 站点评分良好 (≥60)',
+  'approval.factor.ai_low': 'AI 站点评分偏低 (<40)',
+  'approval.factor.orig_low': '原创维度最低分 <4',
+  'approval.factor.low_ratio_high': '超过一半页面存在低分维度',
+  'approval.factor.balanced': '各项指标均衡',
 
   // 报告 UI（终端）
   'reporter.site_type': '站点类型',
