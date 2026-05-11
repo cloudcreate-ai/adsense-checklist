@@ -145,6 +145,22 @@ export async function checkRobotsTxt(origin: string): Promise<boolean> {
   }
 }
 
+export async function getSitemapFromRobots(origin: string): Promise<string[]> {
+  try {
+    const resp = await fetch(`${origin}/robots.txt`);
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    const sitemaps: string[] = [];
+    for (const line of text.split('\n')) {
+      const m = line.trim().match(/^sitemap:\s*(\S+)/i);
+      if (m) sitemaps.push(m[1]);
+    }
+    return sitemaps;
+  } catch {
+    return [];
+  }
+}
+
 export async function checkSitemap(origin: string): Promise<boolean> {
   try {
     const resp = await fetch(`${origin}/sitemap.xml`);
@@ -215,6 +231,14 @@ async function fetchSitemapRecursive(
 
 export async function fetchSitemapUrls(origin: string): Promise<string[]> {
   const seen = new Set<string>();
-  const urls = await fetchSitemapRecursive(`${origin}/sitemap.xml`, seen, 0);
+  // Try default sitemap location first
+  let urls = await fetchSitemapRecursive(`${origin}/sitemap.xml`, seen, 0);
+  // Fallback: check robots.txt for Sitemap: directives
+  if (urls.length === 0) {
+    const robotsSitemaps = await getSitemapFromRobots(origin);
+    for (const smUrl of robotsSitemaps) {
+      urls.push(...await fetchSitemapRecursive(smUrl, seen, 0));
+    }
+  }
   return [...new Set(urls)];
 }
