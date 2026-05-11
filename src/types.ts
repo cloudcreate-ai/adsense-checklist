@@ -125,5 +125,6 @@ export interface CheckOptions {
   timeout?: number;
   apiKey?: string;
   lang?: Lang;
+  expert?: boolean;            // use expert model for final summary (default: false)
   onProgress?: (message: string) => void;
 }

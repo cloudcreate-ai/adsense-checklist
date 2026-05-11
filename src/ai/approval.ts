@@ -140,7 +140,7 @@ Important:
 - If the site type is "tool", "game", or "video", consider whether there is sufficient supporting content beyond the core functionality.`;
 
   try {
-    const text = await callAIWithModel(prompt, 1024, model, getExpertApiBase());
+    const text = await callAIWithModel(prompt, 2048, model, getExpertApiBase());
     const result = extractJson(text);
     return {
       probability: clamp(Number(result.probability), 0, 100),

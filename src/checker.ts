@@ -116,7 +116,7 @@ function sortByFreshness(urls: string[]): string[] {
 }
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, onProgress } = options;
+  const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, expert = false, onProgress } = options;
   const apiKeyResolved = apiKey || process.env.AI_API_KEY;
 
   // Cap phase limits by total crawl budget
@@ -516,7 +516,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Expert AI summary (only with --ai and API key)
     let expertSummary: CheckReport['expertSummary'] = undefined;
-    if (!skipAi && apiKeyResolved) {
+    if (expert && !skipAi && apiKeyResolved) {
       try {
         expertSummary = await summarizeByExpert(
           {

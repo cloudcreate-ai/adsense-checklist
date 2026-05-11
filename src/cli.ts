@@ -39,6 +39,7 @@ program
   .option('--sample-min <number>', 'Min content pages to sample', '20')
   .option('--sample-ratio <ratio>', 'Content page sampling ratio (0-1)', '0.2')
   .option('--ai', 'Enable AI content quality analysis', false)
+  .option('--expert', 'Enable expert AI summary and approval probability (requires --ai)', false)
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
   .option('-o, --output <dir>', 'Report output directory', 'tmp')
@@ -212,6 +213,7 @@ program
         sampleRatio: parseFloat(opts.sampleRatio),
         siteType,
         skipAi: !opts.ai,
+        expert: opts.expert,
         timeout: parseInt(opts.timeout, 10),
         apiKey: opts.apiKey,
         lang,
