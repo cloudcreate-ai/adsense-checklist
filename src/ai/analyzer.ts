@@ -36,8 +36,16 @@ export function getFastApiBase(): string {
   return process.env.AI_FAST_API_BASE || process.env.AI_API_BASE || 'https://api.deepseek.com';
 }
 
+export function getFastApiKey(): string | undefined {
+  return process.env.AI_FAST_API_KEY || process.env.AI_API_KEY;
+}
+
 export function getExpertApiBase(): string {
   return process.env.AI_EXPERT_API_BASE || process.env.AI_API_BASE || 'https://api.anthropic.com';
+}
+
+export function getExpertApiKey(): string | undefined {
+  return process.env.AI_EXPERT_API_KEY || process.env.AI_API_KEY;
 }
 
 export function getFastModel(): string {

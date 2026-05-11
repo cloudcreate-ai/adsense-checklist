@@ -13,6 +13,8 @@ import { detectSiteType } from './detector.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { analyzeWithAI } from './ai/analyzer.js';
 import { computePageAiScore } from './scorer.js';
+import { estimateByRules, summarizeFinal } from './ai/approval.js';
+import { getFastModel, getExpertModel } from './ai/analyzer.js';
 import type { Lang, SiteType } from './types.js';
 
 function formatTimestamp(): string {
@@ -251,6 +253,125 @@ program
       console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
       process.exit(2);
     }
+  });
+
+program.enablePositionalOptions();
+
+// Evaluate approval probability from an existing JSON report
+program
+  .command('eval')
+  .description('Evaluate approval probability from an existing JSON report')
+  .argument('<report>', 'Path to a JSON report file')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('--expert', 'Run expert model assessment in addition to fast model', false)
+  .option('--json', 'Output JSON comparison to stdout')
+  .action(async (reportPath: string, opts) => {
+    const { readFile } = await import('node:fs/promises');
+    let reportJson: string;
+    try {
+      reportJson = await readFile(reportPath, 'utf8');
+    } catch {
+      console.error(chalk.red(`Error: Cannot read report file "${reportPath}"`));
+      process.exit(1);
+    }
+
+    const report = JSON.parse(reportJson);
+    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+
+    // Mechanical estimate
+    const mech = estimateByRules(report);
+
+    if (opts.json) {
+      const result: Record<string, unknown> = {
+        url: report.url,
+        compositeScore: report.compositeScore,
+        hardStatus: report.hardStatus,
+        siteAiScore: report.siteAiScore,
+        mechanical: mech,
+      };
+
+      const fast = await summarizeFinal(report, lang, new Date().toISOString().slice(0, 10), false);
+      if (fast) result.fast = fast;
+
+      const fastM = getFastModel();
+      const expertM = getExpertModel();
+      if (opts.expert && expertM !== fastM) {
+        const expert = await summarizeFinal(report, lang, new Date().toISOString().slice(0, 10), true);
+        if (expert) result.expert = expert;
+      }
+
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
+    }
+
+    // Terminal output
+    const hasAi = (report.pages || []).some((p: { ai?: unknown }) => !!p.ai);
+    console.log(chalk.cyan(`\n=== Report: ${report.url} ===`));
+    console.log(chalk.gray(`Composite: ${report.compositeScore}/100, Hard: ${report.hardStatus}, AI Site: ${report.siteAiScore}/100`));
+    console.log(chalk.gray(`Pages: ${report.pages.length}, AI pages: ${(report.pages as Array<{ ai?: unknown }>).filter(p => p.ai).length}\n`));
+
+    // 1. Mechanical
+    console.log(chalk.bold('─── 1. ' + t('report.approval_mechanical', lang) + ' (rule-based, zero cost) ───'));
+    const probColor = (p: number) => p >= 70 ? chalk.green : p >= 40 ? chalk.yellow : chalk.red;
+    console.log(`  ${t('md.approval_probability', lang)}: ${probColor(mech.probability)(`~${mech.probability}%`)}`);
+    console.log(`  ${t('md.approval_confidence', lang)}: ${mech.confidence}`);
+    for (const f of mech.keyFactors) console.log(`    · ${f}`);
+    console.log('');
+
+    // 2. Fast model
+    console.log(chalk.bold('─── 2. Fast model assessment ───'));
+    const fast = await summarizeFinal(report, lang, new Date().toISOString().slice(0, 10), false);
+    if (fast) {
+      console.log(`  ${t('md.approval_probability', lang)}: ${probColor(fast.probability)(`~${fast.probability}%`)} (${chalk.gray(fast.modelName)})`);
+      console.log(`  ${t('report.approval_verdict', lang)}: ${fast.verdict}`);
+      console.log(`  ${t('md.approval_summary', lang)}: ${fast.detailedSummary}`);
+      if (fast.reasons.length > 0) {
+        console.log(`  ${t('md.approval_reasons', lang)}:`);
+        for (const r of fast.reasons) console.log(`    · ${r}`);
+      }
+      if (fast.topActions.length > 0) {
+        console.log(`  ${t('md.approval_actions', lang)}:`);
+        for (const a of fast.topActions) console.log(`    · ${a}`);
+      }
+    } else {
+      console.log(chalk.gray('  Fast assessment returned null'));
+    }
+    console.log('');
+
+    // 3. Expert model (only if different from fast)
+    const fastM = getFastModel();
+    const expertM = getExpertModel();
+    const shouldRunExpert = opts.expert && expertM !== fastM;
+    let expert: Awaited<ReturnType<typeof summarizeFinal>> = null;
+    if (shouldRunExpert) {
+      console.log(chalk.bold('─── 3. Expert model assessment ───'));
+      expert = await summarizeFinal(report, lang, new Date().toISOString().slice(0, 10), true);
+      if (expert) {
+        console.log(`  ${t('md.approval_probability', lang)}: ${probColor(expert.probability)(`~${expert.probability}%`)} (${chalk.gray(expert.modelName)})`);
+        console.log(`  ${t('report.approval_verdict', lang)}: ${expert.verdict}`);
+        console.log(`  ${t('md.approval_summary', lang)}: ${expert.detailedSummary}`);
+        if (expert.reasons.length > 0) {
+          console.log(`  ${t('md.approval_reasons', lang)}:`);
+          for (const r of expert.reasons) console.log(`    · ${r}`);
+        }
+        if (expert.topActions.length > 0) {
+          console.log(`  ${t('md.approval_actions', lang)}:`);
+          for (const a of expert.topActions) console.log(`    · ${a}`);
+        }
+      } else {
+        console.log(chalk.gray('  Expert assessment returned null'));
+      }
+      console.log('');
+    } else if (opts.expert) {
+      console.log(chalk.gray(`  Expert model same as fast model (${fastM}), skipping\n`));
+    }
+
+    // Comparison
+    console.log(chalk.bold('─── ' + t('md.approval_title', lang) + ' ───'));
+    console.log(`  ${t('report.approval_mechanical', lang)}: ~${mech.probability}%`);
+    if (fast) console.log(`  Fast (${fastM}): ~${fast.probability}%`);
+    if (expert) console.log(`  Expert (${expertM}): ~${expert.probability}%`);
+    console.log('');
   });
 
 program.parse();

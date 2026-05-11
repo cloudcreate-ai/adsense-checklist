@@ -1,5 +1,5 @@
 import type { CheckReport } from '../types.js';
-import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase, getFastModel, getFastApiBase } from './analyzer.js';
+import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase, getExpertApiKey, getFastModel, getFastApiBase, getFastApiKey } from './analyzer.js';
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
@@ -85,6 +85,7 @@ export async function summarizeFinal(
   const langName = AI_LANG_NAMES[lang] ?? lang;
   const model = expert ? getExpertModel() : getFastModel();
   const apiBase = expert ? getExpertApiBase() : getFastApiBase();
+  const apiKey = expert ? getExpertApiKey() : getFastApiKey();
 
   const pageSummaries = report.pages
     .filter(p => p.ai)
@@ -143,7 +144,7 @@ Important:
 - If the site type is "tool", "game", or "video", consider whether there is sufficient supporting content beyond the core functionality.`;
 
   try {
-    const text = await callAIWithModel(prompt, 2048, model, getExpertApiBase());
+    const text = await callAIWithModel(prompt, 2048, model, apiBase, apiKey);
     const result = extractJson(text);
     return {
       probability: clamp(Number(result.probability), 0, 100),
