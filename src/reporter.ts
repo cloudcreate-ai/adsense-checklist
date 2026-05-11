@@ -54,11 +54,18 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push(chalk.gray(`  ${t('reporter.topic', lang)}: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
   }
 
-  // Sampling info
+  // Pages analyzed
   if (report.samplingInfo) {
-    const s = report.samplingInfo;
+    const s = report.samplingInfo as Record<string, unknown>;
     const confColor = s.confidence === 'high' ? chalk.green : s.confidence === 'medium' ? chalk.yellow : chalk.red;
-    lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${s.totalDiscovered} total, ${s.recentCount} recent (6mo), ${s.sampledCount} sampled (${s.samplePct}%) ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
+    if (typeof s.pagesAnalyzed === 'number') {
+      const aiPart = typeof s.aiAnalyzed === 'number' && s.aiAnalyzed > 0 ? `, ${s.aiAnalyzed} AI-analyzed` : '';
+      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${s.pagesAnalyzed} ${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
+    } else {
+      // Backward compat for old format
+      const aiPart = typeof s.aiAnalyzed === 'number' && s.aiAnalyzed > 0 ? `, ${s.aiAnalyzed} AI` : '';
+      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${(s.sampledCount as number) ?? (s.pagesAnalyzed as number) ?? '?'} analyzed${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
+    }
   }
 
   // Unsupported warning
@@ -305,8 +312,14 @@ export function renderMarkdownReport(report: CheckReport): string {
     lines.push(`| ${t('md.table.description', lang)} | ${report.siteTopic.description} |`);
   }
   if (report.samplingInfo) {
-    const s = report.samplingInfo;
-    lines.push(`| ${t('md.table.sampling', lang)} | ${s.totalDiscovered} ${t('md.table.total', lang)}, ${s.recentCount} ${t('md.table.recent', lang)}, ${s.sampledCount} ${t('md.table.sampled', lang)} (${s.samplePct}%, ${s.confidence} ${t('md.table.confidence', lang)}) |`);
+    const s = report.samplingInfo as Record<string, unknown>;
+    if (typeof s.pagesAnalyzed === 'number') {
+      const aiPart = typeof s.aiAnalyzed === 'number' && s.aiAnalyzed > 0 ? `, ${s.aiAnalyzed} ${t('md.table.ai_analyzed', lang)}` : '';
+      lines.push(`| ${t('md.table.pages', lang)} | ${s.pagesAnalyzed}${aiPart}, ${s.confidence} ${t('md.table.confidence', lang)} |`);
+    } else {
+      // Backward compat for old format
+      lines.push(`| ${t('md.table.pages', lang)} | ${s.sampledCount ?? s.pagesAnalyzed ?? '?'} analyzed, ${s.confidence} ${t('md.table.confidence', lang)} |`);
+    }
   }
   lines.push('');
 

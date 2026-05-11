@@ -63,10 +63,8 @@ export interface CheckReport {
   siteTypeConfidence: 'high' | 'medium' | 'low';
   siteTopic?: SiteTopic;
   samplingInfo?: {
-    totalDiscovered: number;
-    recentCount: number;
-    sampledCount: number;
-    samplePct: number;
+    pagesAnalyzed: number;       // total pages actually analyzed
+    aiAnalyzed: number;          // pages with AI analysis
     confidence: 'high' | 'medium' | 'low';
   };
   categories: CheckCategory[];
@@ -134,5 +132,6 @@ export interface CheckOptions {
   apiKey?: string;
   lang?: Lang;
   expert?: boolean;            // use expert model for final summary (default: false)
+  concurrency?: number;        // AI batch concurrency (default: 5)
   onProgress?: (message: string) => void;
 }

@@ -116,7 +116,7 @@ function sortByFreshness(urls: string[]): string[] {
 }
 
 export async function check(options: CheckOptions): Promise<CheckReport> {
-  const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, expert = false, onProgress } = options;
+  const { url, maxCrawl = 50, maxPages = 50, maxContent = 20, sampleMin = 20, sampleRatio = 0.2, skipAi = false, timeout = 30000, apiKey, lang = 'en', siteType: manualType, expert = false, concurrency = 5, onProgress } = options;
   const apiKeyResolved = apiKey || process.env.AI_API_KEY;
 
   // Cap phase limits by total crawl budget
@@ -195,15 +195,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       } catch { deadLinks.push(`${link} (timeout)`); }
     }
 
-    // Phase 1: Crawl initial batch
-    progress(`Phase 1: Crawling ${uniqueLinks.length} pages...`);
+    // Crawl initial batch
+    progress(`Crawling ${uniqueLinks.length} pages...`);
     for (let i = 0; i < uniqueLinks.length; i++) {
       const link = uniqueLinks[i];
-      progress(`Phase 1: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
+      progress(`Crawling: [${i + 1}/${uniqueLinks.length}] ${new URL(link).pathname}${new URL(link).search}`);
       await crawlPage(link);
     }
 
-    // Phase 2: Discover content pages (recursively through listing pages)
+    // Discover content pages (recursively through listing pages)
     const CHILDREN_PER_LISTING = 10;
     const MAX_DISCOVERY_DEPTH = 3;
     const discoveredContent = new Set<string>();
@@ -225,7 +225,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         if (pt === 'listing') {
           // Listing pages: will need to crawl to find their children, queue for deeper discovery
           if (current.depth < MAX_DISCOVERY_DEPTH) {
-            // We'll discover their links when we crawl them in Phase 2
+            // Will discover their links when we crawl them
           }
         } else {
           discoveredContent.add(child);
@@ -249,10 +249,10 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const phase2Limit = Math.min(maxContent, remainingBudget);
     const sortedContent = sortByFreshness([...discoveredContent]);
     const toCrawl = sortedContent.slice(0, phase2Limit);
-    if (toCrawl.length > 0) progress(`Phase 2: Crawling ${toCrawl.length} content pages (from ${discoveredContent.size} discovered)...`);
+    if (toCrawl.length > 0) progress(`Discovering content pages: ${toCrawl.length} to crawl (from ${discoveredContent.size} discovered)...`);
     for (let i = 0; i < toCrawl.length; i++) {
       const link = toCrawl[i];
-      progress(`Phase 2: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}${new URL(link).search}`);
+      progress(`Crawling: [${i + 1}/${toCrawl.length}] ${new URL(link).pathname}${new URL(link).search}`);
       await crawlPage(link);
 
       // After crawling a page, check if it has deeper content links we missed
@@ -278,14 +278,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       if (seen.has(norm)) return false; seen.add(norm); return true;
     });
 
-    // Sampling stats
-    const totalDiscovered = discoveredContent.size;
-    const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000;
-    const recentCount = [...discoveredContent].filter(u => freshnessScore(u) >= sixMonthsAgo).length;
-    const sampledCount = toCrawl.length;
-    const samplePct = totalDiscovered > 0 ? Math.round((sampledCount / totalDiscovered) * 100) : 0;
-    const confidence: 'high' | 'medium' | 'low' = samplePct >= 50 ? 'high' : samplePct >= 20 ? 'medium' : 'low';
-    progress(`Pages: ${totalDiscovered} discovered, ${recentCount} recent (6mo), ${sampledCount} sampled (${samplePct}%, confidence: ${confidence})`);
+    // Progress info
+    progress(`Pages: ${uniquePages.length} analyzed`);
 
     // Detect site type: prefer AI topic, fallback to DOM signals
     progress('Detecting site type...');
@@ -349,7 +343,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     if (!skipAi) {
       try {
         progress(`AI analysis: ${uniquePages.length} pages...`);
-        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic);
+        const aiResult = await analyzeWithAI(uniquePages, lang, apiKey, progress, siteTopic, concurrency);
         pageAnalyses = aiResult.pageAnalyses;
 
         // AI value analysis category (displayed in report)
@@ -501,7 +495,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const partialReport: CheckReport = {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence, siteTopic,
-      samplingInfo: { totalDiscovered, recentCount, sampledCount, samplePct, confidence },
+      samplingInfo: { pagesAnalyzed: uniquePages.length, aiAnalyzed: pageAnalyses.length, confidence: uniquePages.length >= 10 ? 'high' : uniquePages.length >= 5 ? 'medium' : 'low' },
       categories: allCategories, hardCategories, softCategories,
       score: allItems.filter(i => i.status === 'pass').length,
       totalChecks: allItems.length,

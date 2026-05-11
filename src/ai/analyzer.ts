@@ -100,7 +100,6 @@ function getAiLangName(lang: string): string {
 }
 
 const PAGE_CHARS = 5000;
-const CONCURRENCY = 3;
 
 async function analyzePage(
   page: { url: string; text: string },
@@ -328,7 +327,8 @@ export async function analyzeWithAI(
   lang: string = 'en',
   apiKey?: string,
   onProgress?: (message: string) => void,
-  siteTopic?: SiteTopic
+  siteTopic?: SiteTopic,
+  concurrency: number = 5
 ): Promise<FullAiAnalysis> {
   const key = apiKey || getApiKey();
   const empty: FullAiAnalysis = {
@@ -341,13 +341,12 @@ export async function analyzeWithAI(
   const date = new Date().toISOString().slice(0, 10);
 
   try {
-    // Phase 1: Analyze each page individually (concurrency-limited)
     const pageAnalyses: PageAiAnalysis[] = [];
     const progress = onProgress ?? (() => {});
-    for (let i = 0; i < pages.length; i += CONCURRENCY) {
-      const batch = pages.slice(i, i + CONCURRENCY);
-      const batchNum = Math.floor(i / CONCURRENCY) + 1;
-      const totalBatches = Math.ceil(pages.length / CONCURRENCY);
+    for (let i = 0; i < pages.length; i += concurrency) {
+      const batch = pages.slice(i, i + concurrency);
+      const batchNum = Math.floor(i / concurrency) + 1;
+      const totalBatches = Math.ceil(pages.length / concurrency);
       progress(`AI: batch ${batchNum}/${totalBatches} (${batch.map(p => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')})`);
       const results = await Promise.all(
         batch.map(p => analyzePage(p, langName, date, siteTopic))
