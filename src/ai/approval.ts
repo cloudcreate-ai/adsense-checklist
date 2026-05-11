@@ -1,5 +1,5 @@
 import type { CheckReport } from '../types.js';
-import { callAIWithModel, extractJson, getExpertModel } from './analyzer.js';
+import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase } from './analyzer.js';
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
@@ -140,7 +140,7 @@ Important:
 - If the site type is "tool", "game", or "video", consider whether there is sufficient supporting content beyond the core functionality.`;
 
   try {
-    const text = await callAIWithModel(prompt, 1024, model);
+    const text = await callAIWithModel(prompt, 1024, model, getExpertApiBase());
     const result = extractJson(text);
     return {
       probability: clamp(Number(result.probability), 0, 100),

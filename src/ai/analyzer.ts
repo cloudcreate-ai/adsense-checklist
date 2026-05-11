@@ -23,25 +23,33 @@ export interface FullAiAnalysis extends AiAnalysis {
   pageAnalyses: PageAiAnalysis[];
 }
 
-function getApiEndpoint(): string {
-  const base = process.env.AI_API_BASE || 'https://api.deepseek.com';
-  return `${base.replace(/\/$/, '')}/chat/completions`;
+function getApiEndpoint(base?: string): string {
+  const resolved = base || process.env.AI_API_BASE || 'https://api.deepseek.com';
+  return `${resolved.replace(/\/$/, '')}/chat/completions`;
 }
 
-function getApiKey(): string | undefined {
-  return process.env.AI_API_KEY;
+function getApiKey(key?: string): string | undefined {
+  return key || process.env.AI_API_KEY;
+}
+
+function getFastApiBase(): string {
+  return process.env.AI_FAST_API_BASE || process.env.AI_API_BASE || 'https://api.deepseek.com';
+}
+
+export function getExpertApiBase(): string {
+  return process.env.AI_EXPERT_API_BASE || process.env.AI_API_BASE || 'https://api.anthropic.com';
 }
 
 function getFastModel(): string {
   return process.env.AI_FAST_MODEL || process.env.AI_MODEL || 'deepseek-chat';
 }
 
-async function callAI(prompt: string, maxTokens: number = 4096, model?: string): Promise<string> {
-  const response = await fetch(getApiEndpoint(), {
+async function callAI(prompt: string, maxTokens: number = 4096, model?: string, apiBase?: string, apiKey?: string): Promise<string> {
+  const response = await fetch(getApiEndpoint(apiBase), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${getApiKey()}`,
+      Authorization: `Bearer ${getApiKey(apiKey)}`,
     },
     body: JSON.stringify({
       model: model || getFastModel(),
@@ -70,8 +78,8 @@ export function getExpertModel(): string {
   return process.env.AI_EXPERT_MODEL || process.env.AI_MODEL || 'claude-sonnet-4-6';
 }
 
-export async function callAIWithModel(prompt: string, maxTokens: number, model: string): Promise<string> {
-  return callAI(prompt, maxTokens, model);
+export async function callAIWithModel(prompt: string, maxTokens: number, model: string, apiBase?: string, apiKey?: string): Promise<string> {
+  return callAI(prompt, maxTokens, model, apiBase, apiKey);
 }
 
 const AI_LANG_NAMES: Record<string, string> = {
@@ -153,7 +161,7 @@ Reply in ${langName} with JSON:
 }`;
 
   try {
-    const text = await callAI(prompt, 2048);
+    const text = await callAI(prompt, 2048, undefined, getFastApiBase());
     const result = extractJson(text);
     const valueScore = clampScore(result.value);
     const originalityScore = clampScore(result.originality);
@@ -252,7 +260,7 @@ Reply in ${langName} with JSON:
 }`;
 
     try {
-      const text = await callAI(prompt, 1024);
+      const text = await callAI(prompt, 1024, undefined, getFastApiBase());
       const r = extractJson(text);
       const newScore = clampScore(r.compliance);
       // Take the higher score — give benefit of the doubt on re-check
@@ -295,7 +303,7 @@ Based on these results, provide improvement suggestions in ${langName} with JSON
 }`;
 
   try {
-    const text = await callAI(prompt, 2048);
+    const text = await callAI(prompt, 2048, undefined, getFastApiBase());
     const result = extractJson(text);
     return {
       suggestions: result.suggestions ?? [],
