@@ -47,6 +47,9 @@ export interface SiteTopic {
   description: string;
   confidence: 'high' | 'medium' | 'low';
   reasoning: string;
+  // Metadata quality
+  metaIncomplete: boolean;       // true if site has no or very thin meta description
+  metaSuggestions?: string[];    // AI-generated title/description improvement suggestions
 }
 
 export interface CategoryScore {

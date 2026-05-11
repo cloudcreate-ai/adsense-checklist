@@ -183,7 +183,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
           timing.start('ai-topic');
           progress('AI: analyzing site topic...');
           siteTopic = await analyzeSiteTopic(
-            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
+            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText, metaInfo: homeData.metaInfo },
             lang,
             apiKeyResolved
           );

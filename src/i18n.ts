@@ -196,6 +196,7 @@ const en: Record<string, string> = {
   'topic.info': 'Site topic: {topic}',
   'topic.description': '{description}',
   'topic.unsupported_warning': 'This site type ({type}) is not supported by AdSense checklist',
+  'topic.meta_incomplete': 'Page metadata is incomplete — topic/type inferred from content analysis',
 
   // Reporter UI
   'reporter.site_type': 'Site type',
@@ -234,6 +235,8 @@ const en: Record<string, string> = {
   'md.table.site_type': 'Site Type',
   'md.table.topic': 'Topic',
   'md.table.description': 'Description',
+  'md.table.meta_incomplete': 'Metadata',
+  'md.table.meta_suggestions': 'Suggestions',
   'md.table.pages': 'Pages Analyzed',
   'md.table.ai_analyzed': 'AI analyzed',
   'md.table.confidence': 'confidence',
@@ -481,6 +484,7 @@ const zh: Record<string, string> = {
   'topic.info': '站点主题: {topic}',
   'topic.description': '{description}',
   'topic.unsupported_warning': '该站点类型（{type}）不在 AdSense 检查支持范围内',
+  'topic.meta_incomplete': '页面元数据不完整 — 主题/类型通过内容分析推断',
 
   // 报告 UI（终端）
   'reporter.site_type': '站点类型',
@@ -521,6 +525,8 @@ const zh: Record<string, string> = {
   'md.table.site_type': '站点类型',
   'md.table.topic': '主题',
   'md.table.description': '描述',
+  'md.table.meta_incomplete': '元数据状态',
+  'md.table.meta_suggestions': '改进建议',
   'md.table.pages': '分析页面',
   'md.table.ai_analyzed': 'AI 分析',
   'md.table.confidence': '置信度',

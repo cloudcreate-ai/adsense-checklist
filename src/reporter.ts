@@ -52,6 +52,14 @@ export function renderTerminalReport(report: CheckReport): string {
   // Topic info
   if (report.siteTopic) {
     lines.push(chalk.gray(`  ${t('reporter.topic', lang)}: ${report.siteTopic.topic} — ${report.siteTopic.description}`));
+    if (report.siteTopic.metaIncomplete) {
+      lines.push(chalk.yellow(`  ⚠ ${t('topic.meta_incomplete', lang)}`));
+    }
+    if (report.siteTopic.metaSuggestions && report.siteTopic.metaSuggestions.length > 0) {
+      for (const s of report.siteTopic.metaSuggestions) {
+        lines.push(chalk.yellow(`    → ${s}`));
+      }
+    }
   }
 
   // Pages analyzed
@@ -310,6 +318,12 @@ export function renderMarkdownReport(report: CheckReport): string {
   if (report.siteTopic) {
     lines.push(`| ${t('md.table.topic', lang)} | ${report.siteTopic.topic} |`);
     lines.push(`| ${t('md.table.description', lang)} | ${report.siteTopic.description} |`);
+    if (report.siteTopic.metaIncomplete) {
+      lines.push(`| ${t('md.table.meta_incomplete', lang)} | ⚠ ${t('topic.meta_incomplete', lang)} |`);
+    }
+    if (report.siteTopic.metaSuggestions && report.siteTopic.metaSuggestions.length > 0) {
+      lines.push(`| ${t('md.table.meta_suggestions', lang)} | <ul>${report.siteTopic.metaSuggestions.map(s => `<li>${s}</li>`).join('')}</ul> |`);
+    }
   }
   if (report.samplingInfo) {
     const s = report.samplingInfo as Record<string, unknown>;

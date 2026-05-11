@@ -82,6 +82,12 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
   });
   const title = await page.title();
 
+  const metaInfo = await page.evaluate(() => ({
+    description: document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '',
+    ogDescription: document.querySelector('meta[property="og:description"]')?.getAttribute('content') ?? '',
+    h1: Array.from(document.querySelectorAll('h1')).map(h => h.textContent?.trim() ?? '').join(' '),
+  }));
+
   const signals: PageSignals = await page.evaluate(() => {
     const AD_DOMAINS = /googlesyndication|doubleclick|adservice|adsense|pagead|adnxs|amazon-adsystem|facebook\.com\/plugins/i;
 
@@ -116,7 +122,7 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
     };
   });
 
-  return { status, content, text, links, linkDetails, navText, footerText, title, url: urlAfterRender, signals };
+  return { status, content, text, links, linkDetails, navText, footerText, title, url: urlAfterRender, signals, metaInfo };
 }
 
 export async function extractLinks(page: Page): Promise<string[]> {
