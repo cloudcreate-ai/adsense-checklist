@@ -205,10 +205,11 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.gray(`  └─`));
   lines.push('');
 
-  // Detailed checks — show landing page category first, then others
+  // Detailed checks — show landing page category first, then soft categories
+  // Hard categories are already shown in the "硬性要求" box above
   const landingCat = report.categories.find(c => c.name.includes('落地页') || c.name.includes('Landing'));
-  const otherCats = report.categories.filter(c => c !== landingCat);
-  const orderedCats = landingCat ? [landingCat, ...otherCats] : otherCats;
+  const softCats = report.categories.filter(c => c.group === 'soft' && !(c.name.includes('落地页') || c.name.includes('Landing')));
+  const orderedCats = landingCat ? [landingCat, ...softCats] : softCats;
   for (const cat of orderedCats) {
     lines.push(chalk.bold(`  ${cat.name}`));
     for (const item of cat.items) {

@@ -453,7 +453,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const landingPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
     const landingPerfItems = perfCat.items.filter(i => landingPerfNames.includes(i.name));
     const uxItems = perfCat.items.filter(i => !landingPerfNames.includes(i.name));
-    if (landingPerfItems.length > 0) allCategories.push({ name: t('group.performance_min', lang), items: landingPerfItems, group: 'hard' });
+    if (landingPerfItems.length > 0) {
+      // Merge into existing landing page category
+      const existingLanding = allCategories.find(c => c.name === t('group.landing_page', lang));
+      if (existingLanding) {
+        existingLanding.items.push(...landingPerfItems);
+      } else {
+        allCategories.push({ name: t('group.landing_page', lang), items: landingPerfItems, group: 'soft' });
+      }
+    }
     if (uxItems.length > 0) allCategories.push({ name: t('group.user_experience', lang), items: uxItems, group: 'soft' });
 
     // Policy → hard
