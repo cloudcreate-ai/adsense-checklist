@@ -88,7 +88,10 @@ export interface CheckReport {
   softScore: number;               // 0-100 soft scoring result
   warningRatio: number;            // 0-1
   warningPenalty: number;          // points deducted
-  siteAiScore: number;             // 0-100 AI value score (geometric mean, page-type weighted)
+  siteAiScore: number;             // 0-100 AI value score (5-dim geometric mean, all pages weighted)
+  pageValueScore: number;          // 0-100 VOT score (value × originality × translation, excluding required/utility)
+  siteQuality: number;             // 0-100 site-wide quality (hard + content + UX)
+  homeQuality: number;             // 0-100 landing page quality
   aiDimensionAverages?: Record<string, number>; // per-dimension averages across all analyzed pages (0-10)
   aiDimensionStats?: Record<string, {           // per-dimension stats with min and low-count
     avg: number;

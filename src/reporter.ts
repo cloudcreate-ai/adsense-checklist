@@ -161,24 +161,20 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(`  └─ ${t('report.score', lang)}: ${hardStatusMsg}`);
   lines.push('');
 
-  // ── Soft Scoring ──
-  lines.push(chalk.bold(`  ┌─ ${t('report.soft_scoring', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.soft_scoring', lang).length))) + ` ${scoreColor(report.softScore + '/100')}`);
-  for (const cat of report.softCategories) {
-    const isAiCat = cat.name.includes('AI') || cat.name.includes('ai');
-    const score = isAiCat && report.siteAiScore > 0 ? report.siteAiScore : categoryScore(cat);
-    const bar = renderBar(score, 100);
-    const pct = `${score}%`;
-    lines.push(`  │  ${bar} ${pct.padStart(4)}  ${cat.name}`);
-  }
+  // ── Composite Breakdown ──
+  const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
+  const siteColor = (report.siteQuality ?? 0) >= 80 ? chalk.green : (report.siteQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
+  const homeColor = (report.homeQuality ?? 0) >= 80 ? chalk.green : (report.homeQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
+  lines.push(chalk.bold(`  ┌─ ${t('report.composite_breakdown', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.composite_breakdown', lang).length))) + ` ${scoreColor(report.compositeScore + '/100')}`);
+  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
+  lines.push(`  │  ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
+  lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
   if (report.warningPenalty > 0) {
     lines.push(chalk.gray(`  │`));
     lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
   }
   lines.push(chalk.gray(`  │`));
-
-  // Composite breakdown
-  const hardPassRate = report.hardStatus === 'ready' ? 100 : Math.round(report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length) * 100);
-  lines.push(chalk.gray(`  │  ${t('reporter.formula_label_geo', lang, { hardPct: hardPassRate, softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`));
+  lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
   if (report.siteAiScore > 0) {
     lines.push(chalk.gray(`  │  ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
   }

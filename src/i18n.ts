@@ -172,6 +172,10 @@ const en: Record<string, string> = {
 
   // Two-group scoring
   'report.hard_requirements': 'Hard Requirements',
+  'report.composite_breakdown': 'Composite Breakdown',
+  'report.composite_value': 'Page Value',
+  'report.composite_site': 'Site-wide Quality',
+  'report.composite_home': 'Landing Page Quality',
   'report.soft_scoring': 'Smart Scoring',
   'report.hard.ready': 'READY — all requirements met',
   'report.hard.warn': 'NEEDS FIXES — {count} warning(s) to address',
@@ -182,6 +186,9 @@ const en: Record<string, string> = {
   'report.verdict.ai_quality': 'content quality needs improvement (see AI assessment below)',
   'report.warning_ratio': 'Warning ratio: {count}/{total} ({pct}%)',
   'report.warning_penalty': 'Score penalty: -{points}',
+
+  // Composite formula
+  'reporter.formula_new': '{value} × {site}/100 × {home}/100 = {total}',
 
   // Group labels
   'group.required_pages': 'Required Pages',
@@ -487,6 +494,10 @@ const zh: Record<string, string> = {
 
   // 两组评分
   'report.hard_requirements': '硬性要求',
+  'report.composite_breakdown': '综合评分',
+  'report.composite_value': '网页价值',
+  'report.composite_site': '全站质量',
+  'report.composite_home': '首页质量',
   'report.soft_scoring': '智能评分',
   'report.hard.ready': 'READY — 所有必要项达标',
   'report.hard.warn': 'NEEDS FIXES — {count} 项警告待修复',
@@ -547,6 +558,7 @@ const zh: Record<string, string> = {
   'reporter.dim_stats_label': '维度统计',
   'reporter.formula_label': '硬性 {hardPct}% × 0.4 + 智能 {softPct}% × 0.6 - 扣分 {penalty} = {total}',
   'reporter.formula_label_geo': '√(硬性 {hardPct}% × 智能 {softPct}%) - 扣分 {penalty} = {total}',
+  'reporter.formula_new': '{value} × {site}/100 × {home}/100 = {total}',
   'reporter.mechanical_label': '基础评分',
   'reporter.advanced_label': '高级评分',
 
