@@ -232,7 +232,7 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push('');
 
   // ============================================================
-  // 3. ITEMIZED SCORES — composite + 3 components + formula
+  // 3. ITEMIZED SCORES — site quality → home quality → page value
   // ============================================================
   const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
   const siteColor = (report.siteQuality ?? 0) >= 80 ? chalk.green : (report.siteQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
@@ -241,9 +241,9 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.bold(`  ${t('report.section.itemized', lang)}`));
   lines.push('');
   lines.push(`  ┌─ ${t('report.composite_score', lang)}: ${scoreColor(`${report.compositeScore}/100`)}`);
-  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
   lines.push(`  │  ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
   lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
+  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
   lines.push(chalk.gray(`  │`));
   lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
   if (report.pageValueEstimated) {
@@ -253,23 +253,6 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
   }
   lines.push(chalk.gray(`  └─`));
-  lines.push('');
-
-  // Hard requirements summary box
-  const hardColor = report.hardStatus === 'ready' ? chalk.green : report.hardStatus === 'warn' ? chalk.yellow : chalk.red;
-  const hardLabel = report.hardStatus === 'ready' ? 'PASS' : report.hardStatus === 'warn' ? 'WARN' : 'FAIL';
-  lines.push(chalk.bold(`  ┌─ ${t('report.hard_requirements', lang)} `) + chalk.gray('─'.repeat(Math.max(0, 40 - t('report.hard_requirements', lang).length))) + ` ${hardColor.bold(hardLabel)}`);
-  for (const cat of report.hardCategories) {
-    for (const item of cat.items) {
-      lines.push(`  │  ${ICONS[item.status]} ${chalk.bold(item.name.padEnd(16))} ${item.message}`);
-    }
-  }
-  const hardStatusKey = `report.hard.${report.hardStatus}` as string;
-  const hardStatusMsg = report.hardStatus === 'ready'
-    ? t(hardStatusKey, lang)
-    : t(hardStatusKey, lang, { count: report.hardStatus === 'fail' ? hardFailCount : hardWarnCount });
-  lines.push(chalk.gray(`  │`));
-  lines.push(`  └─ ${t('report.score', lang)}: ${hardStatusMsg}`);
   lines.push('');
 
   // ============================================================
@@ -286,8 +269,29 @@ export function renderTerminalReport(report: CheckReport): string {
   }
 
   // ============================================================
-  // 5. SITE-WIDE QUALITY BREAKDOWN — hard + content + UX items
+  // 5. SITE-WIDE QUALITY BREAKDOWN — hard requirements + content + UX
   // ============================================================
+  lines.push(chalk.bold(`  ${t('report.section.site_quality', lang)} (${siteColor(Math.round(report.siteQuality ?? 0) + '/100')})`));
+  lines.push('');
+
+  // Hard requirements as first subsection
+  const hardColor = report.hardStatus === 'ready' ? chalk.green : report.hardStatus === 'warn' ? chalk.yellow : chalk.red;
+  const hardLabel = report.hardStatus === 'ready' ? 'PASS' : report.hardStatus === 'warn' ? 'WARN' : 'FAIL';
+  lines.push(chalk.bold(`    ── ${t('report.hard_requirements', lang)} ${hardColor.bold(hardLabel)}`));
+  lines.push('');
+  for (const cat of report.hardCategories) {
+    for (const item of cat.items) {
+      lines.push(`      ${ICONS[item.status]} ${chalk.bold(item.name.padEnd(16))} ${item.message}`);
+    }
+  }
+  const hardStatusKey = `report.hard.${report.hardStatus}` as string;
+  const hardStatusMsg = report.hardStatus === 'ready'
+    ? t(hardStatusKey, lang)
+    : t(hardStatusKey, lang, { count: report.hardStatus === 'fail' ? hardFailCount : hardWarnCount });
+  lines.push(chalk.gray(`      ${t('report.score', lang)}: ${hardStatusMsg}`));
+  lines.push('');
+
+  // Content and UX categories
   const softCats = report.categories.filter(c => c.group === 'soft' && !(c.name.includes('落地页') || c.name.includes('Landing')));
   const contentCats = softCats.filter(c =>
     c.name.includes('内容质量') || c.name.includes('Content')
@@ -297,17 +301,14 @@ export function renderTerminalReport(report: CheckReport): string {
     || c.name.includes('性能') || c.name.includes('Performance')
   );
 
-  if (contentCats.length > 0 || uxCats.length > 0) {
-    lines.push(chalk.bold(`  ${t('report.section.site_quality', lang)} (${siteColor(Math.round(report.siteQuality ?? 0) + '/100')})`));
+  for (const cat of [...contentCats, ...uxCats]) {
+    lines.push(chalk.bold(`    ── ${cat.name}`));
     lines.push('');
-    for (const cat of [...contentCats, ...uxCats]) {
-      lines.push(chalk.bold(`    ${cat.name}`));
-      for (const item of cat.items) {
-        lines.push(`      ${ICONS[item.status]} ${item.message}`);
-        if (item.detail) lines.push(chalk.gray(`         ${item.detail}`));
-        if (item.detailList) {
-          for (const d of item.detailList) lines.push(chalk.gray(`         • ${d}`));
-        }
+    for (const item of cat.items) {
+      lines.push(`      ${ICONS[item.status]} ${item.message}`);
+      if (item.detail) lines.push(chalk.gray(`         ${item.detail}`));
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(chalk.gray(`         • ${d}`));
       }
     }
     lines.push('');
@@ -585,36 +586,21 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push('');
 
   // ============================================================
-  // 3. ITEMIZED SCORES
+  // 3. ITEMIZED SCORES — site quality → home quality → page value
   // ============================================================
   lines.push(`## ${t('md.section.itemized', lang)}`);
   lines.push('');
   lines.push(`| ${t('md.table.metric', lang)} | ${t('md.table.score', lang)} |`);
   lines.push(`|------|------|`);
-  lines.push(`| ${t('report.composite_value', lang)} | ${Math.round(report.pageValueScore ?? 0)}/100 |`);
   lines.push(`| ${t('report.composite_site', lang)} | ${Math.round(report.siteQuality ?? 0)}/100 |`);
   lines.push(`| ${t('report.composite_home', lang)} | ${Math.round(report.homeQuality ?? 0)}/100 |`);
+  lines.push(`| ${t('report.composite_value', lang)} | ${Math.round(report.pageValueScore ?? 0)}/100 |`);
   lines.push(`| **${t('report.composite_score', lang)}** | **${report.compositeScore}/100** |`);
   lines.push('');
   lines.push(`> ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`);
   if (report.pageValueEstimated) {
     lines.push('');
     lines.push(`> ⚠ ${t('reporter.value_estimated_note', lang)}`);
-  }
-  lines.push('');
-
-  // Hard requirements
-  const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';
-  lines.push(`### ${t('md.hard_requirements', lang)} ${hardLabel}`);
-  lines.push('');
-  for (const cat of report.hardCategories) {
-    for (const item of cat.items) {
-      lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
-      if (item.detail) lines.push(`  - ${item.detail}`);
-      if (item.detailList) {
-        for (const d of item.detailList) lines.push(`  - ${d}`);
-      }
-    }
   }
   lines.push('');
 
@@ -632,8 +618,27 @@ export function renderMarkdownReport(report: CheckReport): string {
   }
 
   // ============================================================
-  // 5. SITE-WIDE QUALITY BREAKDOWN
+  // 5. SITE-WIDE QUALITY BREAKDOWN — hard + content + UX
   // ============================================================
+  const hardLabel = report.hardStatus === 'ready' ? '✅ PASS' : report.hardStatus === 'warn' ? '⚠️ WARN' : '❌ FAIL';
+  lines.push(`## ${t('md.section.site_quality', lang)} (${Math.round(report.siteQuality ?? 0)}/100)`);
+  lines.push('');
+
+  // Hard requirements as first subsection
+  lines.push(`### ${t('md.hard_requirements', lang)} ${hardLabel}`);
+  lines.push('');
+  for (const cat of report.hardCategories) {
+    for (const item of cat.items) {
+      lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
+      if (item.detail) lines.push(`  - ${item.detail}`);
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(`  - ${d}`);
+      }
+    }
+  }
+  lines.push('');
+
+  // Content and UX categories
   const softCats = report.categories.filter(c => c.group === 'soft' && !(c.name.includes('落地页') || c.name.includes('Landing')));
   const contentCats = softCats.filter(c =>
     c.name.includes('内容质量') || c.name.includes('Content')
@@ -643,21 +648,17 @@ export function renderMarkdownReport(report: CheckReport): string {
     || c.name.includes('性能') || c.name.includes('Performance')
   );
 
-  if (contentCats.length > 0 || uxCats.length > 0) {
-    lines.push(`## ${t('md.section.site_quality', lang)} (${Math.round(report.siteQuality ?? 0)}/100)`);
+  for (const cat of [...contentCats, ...uxCats]) {
+    lines.push(`### ${cat.name}`);
     lines.push('');
-    for (const cat of [...contentCats, ...uxCats]) {
-      lines.push(`### ${cat.name}`);
-      lines.push('');
-      for (const item of cat.items) {
-        lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
-        if (item.detail) lines.push(`  - ${item.detail}`);
-        if (item.detailList) {
-          for (const d of item.detailList) lines.push(`  - ${d}`);
-        }
+    for (const item of cat.items) {
+      lines.push(`- ${MD_ICONS[item.status]} **${item.name}**: ${item.message}`);
+      if (item.detail) lines.push(`  - ${item.detail}`);
+      if (item.detailList) {
+        for (const d of item.detailList) lines.push(`  - ${d}`);
       }
-      lines.push('');
     }
+    lines.push('');
   }
 
   // ============================================================

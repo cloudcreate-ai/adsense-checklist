@@ -28,7 +28,6 @@ export async function checkSiteStructure(
   }
 
   const internal = links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } });
-  items.push({ name: t('item.structure.internal', lang), status: internal.length >= 5 ? 'pass' : 'warn', message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }) });
 
   // Dead links: ratio-based — ≥20% of total links → warn
   const totalLinks = links.length;
@@ -39,6 +38,23 @@ export async function checkSiteStructure(
   const statusTimeout = deadLinks.filter(d => d.status === 'timeout');
   const allDetailList = deadLinks.map(d => `${d.url} (${d.status})`);
 
+  // Combined navigation check: internal link count + dead link status
+  if (deadCount > 0) {
+    items.push({
+      name: t('item.structure.internal', lang),
+      status: deadRatio >= 0.2 ? 'warn' : internal.length >= 5 ? 'pass' : 'warn',
+      message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }),
+      detailList: [`${deadCount} dead links detected (${deadRatio >= 0.2 ? 'excessive' : 'acceptable'}): ${deadCount}×4xx=${status4xx.length}, 5xx=${status5xx.length}, timeout=${statusTimeout.length}`],
+    });
+  } else {
+    items.push({
+      name: t('item.structure.internal', lang),
+      status: internal.length >= 5 ? 'pass' : 'warn',
+      message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }),
+    });
+  }
+
+  // Dead links check (only show details, not duplicate count)
   if (deadRatio >= 0.2) {
     items.push({
       name: t('item.structure.deadlinks', lang),
@@ -46,11 +62,11 @@ export async function checkSiteStructure(
       message: t('structure.deadlinks.warn', lang, { count: deadCount, total: totalLinks, pct: Math.round(deadRatio * 100), c4xx: status4xx.length, c5xx: status5xx.length, ctimeout: statusTimeout.length }),
       detailList: allDetailList,
     });
-  } else {
+  } else if (deadCount > 0) {
     items.push({
       name: t('item.structure.deadlinks', lang),
-      status: deadCount > 0 ? 'pass' : 'pass',
-      message: t(deadCount > 0 ? 'structure.deadlinks.pass' : 'structure.deadlinks.none', lang, { count: deadCount, c4xx: status4xx.length, c5xx: status5xx.length, ctimeout: statusTimeout.length }),
+      status: 'pass',
+      message: t('structure.deadlinks.pass', lang, { count: deadCount, c4xx: status4xx.length, c5xx: status5xx.length, ctimeout: statusTimeout.length }),
       detailList: allDetailList,
     });
   }
