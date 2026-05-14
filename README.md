@@ -14,6 +14,26 @@ Or run directly without installing:
 npx @cloudcreate/adsense-check https://example.com
 ```
 
+## AI Configuration
+
+Many features (topic detection, 5-dimension scoring, approval estimation) require an AI API key. Supports any OpenAI-compatible API (DeepSeek, OpenAI, Moonshot, local LLM, etc.).
+
+**Option 1: Environment file**
+
+```bash
+cp .env.example .env
+# Edit .env:
+#   AI_API_KEY=sk-xxx
+#   AI_API_BASE=https://api.deepseek.com
+#   AI_MODEL=deepseek-chat
+```
+
+**Option 2: Command-line flag**
+
+```bash
+adsense-check https://example.com --ai --api-key sk-xxx...
+```
+
 ## Quick Start
 
 ```bash
@@ -23,7 +43,7 @@ adsense-check https://example.com --ai
 # Full check with expert AI assessment
 adsense-check https://example.com --ai --expert
 
-# Quick check without AI
+# Quick check without AI (mechanical checks only)
 adsense-check https://example.com
 
 # JSON output (for programmatic use)
@@ -162,24 +182,6 @@ eval <report>             Evaluate approval probability from existing JSON repor
   --lang <lang>           Output language: en|zh (default: en)
   --expert                Run expert model assessment
   --json                  Output JSON comparison
-```
-
-## AI Configuration
-
-Supports any OpenAI-compatible API (DeepSeek, OpenAI, Moonshot, local LLM, etc.).
-
-```bash
-cp .env.example .env
-# Edit .env:
-#   AI_API_KEY=sk-xxx
-#   AI_API_BASE=https://api.deepseek.com
-#   AI_MODEL=deepseek-chat
-```
-
-Or pass directly:
-
-```bash
-adsense-check https://example.com --ai --api-key sk-xxx...
 ```
 
 ## Report Output
