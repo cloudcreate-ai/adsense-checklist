@@ -187,8 +187,41 @@ const en: Record<string, string> = {
   'report.warning_ratio': 'Warning ratio: {count}/{total} ({pct}%)',
   'report.warning_penalty': 'Score penalty: -{points}',
 
+  // Report structure (new format)
+  'report.section.conclusion': 'Conclusion',
+  'report.section.algorithm': 'Scoring Algorithm',
+  'report.section.itemized': 'Itemized Scores',
+  'report.section.suggestions': 'Improvement Suggestions',
+  'report.section.site_quality': 'Site-wide Quality Breakdown',
+  'report.section.home_quality': 'Landing Page Quality Breakdown',
+  'report.section.value': 'Page Value Breakdown',
+  'report.section.problems': 'Problem Details',
+  'report.algorithm_desc': 'Composite = Page Value(VOT) × Site Quality/100 × Landing Page Quality/100',
+  'report.algorithm_vot': 'VOT = ∛(Value × Originality × Translation) — excludes compliance/relevance (threshold signals)',
+  'report.algorithm_cap': 'Caps: any page compliance <6 → max 50; avg relevance <6 → max 60',
+  'report.no_suggestions': 'No specific improvement suggestions from AI analysis',
+
+  // Markdown report sections
+  'md.section.conclusion': 'Conclusion',
+  'md.section.algorithm': 'Scoring Algorithm',
+  'md.section.itemized': 'Itemized Scores',
+  'md.section.suggestions': 'Improvement Suggestions',
+  'md.section.site_quality': 'Site-wide Quality Breakdown',
+  'md.section.home_quality': 'Landing Page Quality Breakdown',
+  'md.section.value': 'Page Value Breakdown',
+  'md.section.problems': 'Problem Details',
+  'md.algorithm_desc': 'Composite = Page Value(VOT) × Site Quality/100 × Landing Page Quality/100',
+  'md.algorithm_vot': 'VOT = ∛(Value × Originality × Translation) — excludes compliance/relevance (threshold signals)',
+  'md.algorithm_cap': 'Caps: any page compliance <6 → max 50; avg relevance <6 → max 60',
+  'md.approval_mechanical': 'Mechanical estimate',
+  'md.approval_fast': 'Fast assessment',
+  'md.approval_expert': 'Expert assessment',
+  'md.table.metric': 'Metric',
+
   // Composite formula
   'reporter.formula_new': '{value} × {site}/100 × {home}/100 = {total}',
+  'reporter.formula_fallback': '√(硬性 {hardPct}% × 智能 {softPct}%) = {total}',
+  'reporter.formula_fallback_note': 'AI analysis not enabled, using fallback formula',
 
   // Group labels
   'group.required_pages': 'Required Pages',
@@ -559,6 +592,41 @@ const zh: Record<string, string> = {
   'reporter.formula_label': '硬性 {hardPct}% × 0.4 + 智能 {softPct}% × 0.6 - 扣分 {penalty} = {total}',
   'reporter.formula_label_geo': '√(硬性 {hardPct}% × 智能 {softPct}%) - 扣分 {penalty} = {total}',
   'reporter.formula_new': '{value} × {site}/100 × {home}/100 = {total}',
+
+  // 报告结构（新格式）
+  'report.section.conclusion': '审核结论',
+  'report.section.algorithm': '评分算法',
+  'report.section.itemized': '逐项分数',
+  'report.section.suggestions': '提升建议',
+  'report.section.site_quality': '全站质量分解',
+  'report.section.home_quality': '首页质量分解',
+  'report.section.value': '页面价值分解',
+  'report.section.problems': '问题详情',
+  'report.algorithm_desc': '综合分 = 网页价值(VOT) × 全站质量/100 × 首页质量/100',
+  'report.algorithm_vot': 'VOT = ∛(价值 × 原创 × 翻译) — 不含合规/相关性（它们是门槛信号）',
+  'report.algorithm_cap': '上限：任一页面合规<6 → 最高50分；平均相关性<6 → 最高60分',
+  'report.no_suggestions': 'AI 分析未给出具体提升建议',
+
+  // Markdown 报告章节
+  'md.section.conclusion': '审核结论',
+  'md.section.algorithm': '评分算法',
+  'md.section.itemized': '逐项分数',
+  'md.section.suggestions': '提升建议',
+  'md.section.site_quality': '全站质量分解',
+  'md.section.home_quality': '首页质量分解',
+  'md.section.value': '页面价值分解',
+  'md.section.problems': '问题详情',
+  'md.algorithm_desc': '综合分 = 网页价值(VOT) × 全站质量/100 × 首页质量/100',
+  'md.algorithm_vot': 'VOT = ∛(价值 × 原创 × 翻译) — 不含合规/相关性（它们是门槛信号）',
+  'md.algorithm_cap': '上限：任一页面合规<6 → 最高50分；平均相关性<6 → 最高60分',
+  'md.approval_mechanical': '机械推算',
+  'md.approval_fast': '快速评估',
+  'md.approval_expert': '深度评估',
+  'md.table.metric': '指标',
+
+  'reporter.formula_fallback': '√(硬性 {hardPct}% × 智能 {softPct}%) = {total}',
+  'reporter.formula_fallback_note': '未启用 AI 分析，使用备用公式',
+
   'reporter.mechanical_label': '基础评分',
   'reporter.advanced_label': '高级评分',
 
