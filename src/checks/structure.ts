@@ -1,6 +1,6 @@
 import type { CheckCategory, CheckItem, Lang } from '../types.js';
 import { t } from '../i18n.js';
-import { checkRobotsTxt, checkSitemap } from '../browser.js';
+import { checkRobotsTxt, checkSitemap, getSitemapFromRobots } from '../browser.js';
 
 export async function checkSiteStructure(
   origin: string, links: string[], h1Count: number, deadLinks: string[] = [], lang: Lang
@@ -14,8 +14,17 @@ export async function checkSiteStructure(
   const hasRobots = await checkRobotsTxt(origin);
   items.push({ name: 'robots.txt', status: hasRobots ? 'pass' : 'warn', message: t(hasRobots ? 'structure.robots.pass' : 'structure.robots.warn', lang) });
 
+  // Sitemap: try /sitemap.xml first, then fallback to robots.txt
   const hasSitemap = await checkSitemap(origin);
-  items.push({ name: 'sitemap.xml', status: hasSitemap ? 'pass' : 'warn', message: t(hasSitemap ? 'structure.sitemap.pass' : 'structure.sitemap.warn', lang) });
+  const robotsSitemaps = await getSitemapFromRobots(origin);
+  const sitemapViaRobots = robotsSitemaps.length > 0;
+  if (hasSitemap && !sitemapViaRobots) {
+    items.push({ name: 'sitemap.xml', status: 'pass', message: t('structure.sitemap.pass', lang) });
+  } else if (hasSitemap && sitemapViaRobots) {
+    items.push({ name: 'sitemap.xml', status: 'pass', message: t('structure.sitemap.pass_via_robots', lang, { count: robotsSitemaps.length }) });
+  } else {
+    items.push({ name: 'sitemap.xml', status: 'warn', message: t('structure.sitemap.warn', lang) });
+  }
 
   const internal = links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } });
   items.push({ name: t('item.structure.internal', lang), status: internal.length >= 5 ? 'pass' : 'warn', message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }) });

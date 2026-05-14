@@ -183,7 +183,8 @@ export function computeCompositeScore(
   pageScores: Array<{ pageType: PageType; score: number }>,
   hardCategories: CheckCategory[],
   softCategories: CheckCategory[],
-  aiAnalyses?: PageAiAnalysis[]
+  aiAnalyses?: PageAiAnalysis[],
+  contentDuplicationScore?: number
 ): CompositeResult {
   // 1. Hard pass rate
   const hardItems = hardCategories.flatMap(c => c.items);
@@ -218,8 +219,12 @@ export function computeCompositeScore(
   // AI value score: use computed siteAiScore (0-100)
   const aiValue = siteAiScore > 0 ? siteAiScore : (aiCat ? categoryPassRate(aiCat) : 100);
 
-  // Content quality: pass rate of content quality category items
-  const contentQuality = contentCat ? categoryPassRate(contentCat) : 100;
+  // Content quality: blend category pass rate with content duplication score
+  // When duplication score is low (< 50), it dominates to reflect the severity
+  const contentQualityBase = contentCat ? categoryPassRate(contentCat) : 100;
+  const contentQuality = contentDuplicationScore != null
+    ? Math.round(contentQualityBase * (contentDuplicationScore / 100) * 0.6 + contentDuplicationScore * 0.4)
+    : contentQualityBase;
 
   // User experience: pass rate of UX category items
   const userExperience = uxCat ? categoryPassRate(uxCat) : 100;

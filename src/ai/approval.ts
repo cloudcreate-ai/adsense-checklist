@@ -37,14 +37,20 @@ export function estimateByRules(report: CheckReport, lang: string = 'en'): {
 
   // Originality dimension weakness
   if (report.aiDimensionStats) {
-    const origMin = report.aiDimensionStats.originality.min;
-    if (origMin >= 6) { prob += 5; }
-    else if (origMin < 4) { prob -= 10; factors.push(t('approval.factor.orig_low', lang)); }
+    const origStats = report.aiDimensionStats.originality;
+    if (origStats) {
+      const origMin = origStats.min;
+      if (origMin >= 6) { prob += 5; }
+      else if (origMin < 4) { prob -= 10; factors.push(t('approval.factor.orig_low', lang)); }
+    }
 
     // Low-count page ratio
     const totalPages = report.pages.length;
     if (totalPages > 0) {
-      const totalLow = Object.values(report.aiDimensionStats).reduce((s, d) => Math.max(s, d.lowCount), 0);
+      const totalLow = Object.values(report.aiDimensionStats).reduce((s, d) => {
+        const stats = d as { lowCount?: number } | null;
+        return Math.max(s, stats?.lowCount ?? 0);
+      }, 0);
       const lowRatio = totalLow / totalPages;
       if (lowRatio >= 0.5) { prob -= 10; factors.push(t('approval.factor.low_ratio_high', lang)); }
       else if (lowRatio < 0.2) { prob += 5; }
@@ -96,13 +102,13 @@ export async function summarizeFinal(
       return `- ${p.url}: [${a.status}] V=${a.valueScore ?? 5} O=${a.originalityScore ?? 5} R=${a.relevanceScore ?? 5} C=${a.complianceScore ?? 5} — ${a.assessment.slice(0, 100)}`;
     }).join('\n');
 
-  const dimStats = report.aiDimensionStats ? `
-Dimension stats:
-  Value:      avg=${report.aiDimensionStats.value.avg} min=${report.aiDimensionStats.value.min} low=${report.aiDimensionStats.value.lowCount}
-  Originality: avg=${report.aiDimensionStats.originality.avg} min=${report.aiDimensionStats.originality.min} low=${report.aiDimensionStats.originality.lowCount}
-  Relevance:  avg=${report.aiDimensionStats.relevance.avg} min=${report.aiDimensionStats.relevance.min} low=${report.aiDimensionStats.relevance.lowCount}
-  Compliance: avg=${report.aiDimensionStats.compliance.avg} min=${report.aiDimensionStats.compliance.min} low=${report.aiDimensionStats.compliance.lowCount}
-` : 'No dimension stats available.';
+  const dimStats = report.aiDimensionStats ? (() => {
+    const entries = Object.entries(report.aiDimensionStats) as Array<[string, { avg: number; min: number; lowCount: number }]>;
+    if (entries.length === 0) return '';
+    return `\nDimension stats:\n${entries.map(([key, d]) =>
+      `  ${key.charAt(0).toUpperCase() + key.slice(1)}: avg=${d.avg} min=${d.min} low=${d.lowCount}`
+    ).join('\n')}\n`;
+  })() : 'No dimension stats available.';
 
   const siteTopic = report.siteTopic
     ? `\nSite topic: ${report.siteTopic.topic}\nSite type: ${report.siteTopic.type}\nSite description: ${report.siteTopic.description}`

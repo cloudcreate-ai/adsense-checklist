@@ -123,8 +123,10 @@ ${topicContext}
 Score each dimension from 0 to 10:
 1. value (0-10): Does the page provide real, substantive information? 10 = highly valuable, 0 = completely empty/useless.
    Consider: depth of information, usefulness to readers, whether it helps solve a problem or answers a question.
-2. originality (0-10): Is the content original and not scraped/AI-generated/copied? 10 = fully original, 0 = clearly scraped or auto-generated.
+   IMPORTANT: Be strict about templated content structure. If a page has sections like "Overview, How to Play, FAQ, Reviews" that appear identical in structure across many pages on the site (same headings, same section types, same review format), this is a templated pattern and the page should score lower on value (4-6) even if each section has text. Pages with unique, page-specific editorial content (original review, personal gameplay experience, unique strategy guide) can score 7+. Pages that only have an iframe embed + tags + a one-sentence description should score 3-5.
+2. originality (0-10): Is the content original, substantive, and not templated/scraped/AI-generated/copied? 10 = fully original with unique perspective, 0 = clearly scraped, auto-generated, or templated.
    Consider: unique perspective, personal experience, not just rephrasing others' content.
+   IMPORTANT: penalize templated formula descriptions (e.g., "Play X free online. Enjoy X and hundreds of other games. No downloads required."). These are auto-generated patterns, not original content. Pages that only contain a game title, tags, and an embed without any original editorial content should score 3-5. Pages with generic one-sentence descriptions following a boilerplate pattern should score 4-6. Only pages with genuine original analysis, review, gameplay tips, or editorial commentary should score 7+.
 3. relevance (0-10): How relevant is this page to the site's topic? 10 = directly on-topic, 0 = completely off-topic.
    Also set "relevanceLabel": "relevant" | "tangential" | "off-topic".
 4. compliance (0-10): Does the content comply with Google AdSense policies? 10 = fully compliant, 0 = serious violations.
@@ -138,8 +140,15 @@ Score each dimension from 0 to 10:
    Declared language: ${pageLanguage || 'English'}
    Score 10 = content is fully, correctly, and naturally written in the declared language.
    Score 0 = content is completely untranslated or machine-translated gibberish.
-   Check for: mixed-language content (e.g., Japanese page with English paragraphs), awkward machine translation artifacts, unlocalized technical terms left in another language.
-   If the declared language is the default (English) or not set, score 10 automatically.
+
+   **STRICT SCORING RULES — do NOT be lenient:**
+   - If ANY paragraph or section of substantial length (2+ sentences) is in a different language than declared, score ≤ 5.
+   - If FAQ headings are in one language but answers are in another, score ≤ 4.
+   - If game descriptions or key content blocks are left in English while the rest is in the declared language, score ≤ 5.
+   - If the page mixes 3+ languages (e.g., Indonesian page with English content and Chinese UI text), score ≤ 3.
+   - Minor UI artifacts (button text, copyright notice) alone → score 8-9.
+   - Google recommends keeping languages separate on the same page (https://support.google.com/adsense/thread/408289688). Pages that mix languages read as low-effort or machine-translated to users and advertisers.
+   - If the declared language is the default (English) or not set, score 10 automatically.
 
 Also classify the page type based on its content and purpose. Choose ONE:
 - "homepage": The site's main landing page

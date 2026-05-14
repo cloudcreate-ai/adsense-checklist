@@ -21,11 +21,8 @@ const en: Record<string, string> = {
   'item.content.scale': 'Site Scale',
   'item.content.game_desc': 'Game Descriptions',
   'item.content.iframe_quality': 'Iframe Quality',
-  'item.content.game_variety': 'Game Variety',
   'item.content.video_desc': 'Video Descriptions',
-  'item.content.video_variety': 'Video Variety',
   'item.content.reference_entry': 'Reference Entries',
-  'item.content.reference_variety': 'Reference Variety',
 
   // Structure items
   'item.structure.internal': 'Internal Links',
@@ -63,12 +60,15 @@ const en: Record<string, string> = {
   'content.subpage.pass': 'All subpages have sufficient content',
   'content.subpage.warn': '{thin}/{total} subpages have thin content (<300 chars)',
   'content.subpage.fail': '{thin}/{total} subpages have thin content (<300 chars)',
-  'content.template.pass': 'Page structure diversity is good (similarity {pct}%)',
-  'content.template.fail': 'Page structure similarity {pct}% — likely mass-produced template pages',
+  'content.template.pass': 'Page structure diversity is good (max similarity {pct}%)',
+  'content.template.fail': '{count} pages share a similar template (max similarity {pct}%, e.g. {a} vs {b})',
+  'content.template.info': 'Skeleton similarity detected ({count} pages, max {pct}%, e.g. {a} vs {b}) — this is a normal structural pattern',
   'content.filler.pass': 'No obvious filler/padding content detected',
   'content.filler.warn': '{count} instances of filler content detected',
-  'content.dup.pass': 'Cross-page content uniqueness is good ({pct}% overlap)',
-  'content.dup.warn': '{pct}% of content segments are duplicated across pages',
+  'content.dup.pass': 'Content originality {score}/100 (largest template cluster: {pct} pages)',
+  'content.dup.warn': 'Content originality {score}/100 ({pct} pages share similar content template, e.g. {a} vs {b})',
+  'content.dup.fail': 'Content originality only {score}/100 ({pct} pages share similar content template, widespread content duplication)',
+  'content.dup.skip': 'Content value assessed by AI analysis',
   'content.freshness.pass': 'Site has recent updates (latest: {date})',
   'content.freshness.warn_old': 'Latest update: {date} — over 6 months old',
   'content.freshness.warn_none': 'No date information found in pages',
@@ -81,20 +81,14 @@ const en: Record<string, string> = {
   'content.game_desc.warn': '{thin}/{total} game pages lack description text (recommend 100+ chars of gameplay info)',
   'content.iframe_quality.pass': '{count} game iframe(s) embedded',
   'content.iframe_quality.warn': '{count} game iframes detected — ensure each has proper title and size attributes',
-  'content.game_variety.pass': 'Game pages show good variety',
-  'content.game_variety.warn': 'Game pages are {pct}% similar — may look like mass-produced content',
 
   // Video-specific messages
   'content.video_desc.pass': '{total} video page(s) have sufficient description text',
   'content.video_desc.warn': '{thin}/{total} video pages lack description text (recommend 50+ chars)',
-  'content.video_variety.pass': 'Video pages show good variety (similarity {pct}%)',
-  'content.video_variety.warn': 'Video pages are {pct}% similar — may look like mass-produced content',
 
   // Reference-specific messages
   'content.reference_entry.pass': 'Reference entries have sufficient structure and metadata',
   'content.reference_entry.warn': '{thin}/{total} reference entries lack structure (recommend 100+ chars)',
-  'content.reference_variety.pass': 'Reference pages show good variety (similarity {pct}%)',
-  'content.reference_variety.warn': 'Reference pages are {pct}% similar — expected for structured entries',
 
   // Site type detection
   'detector.type.content': 'Content Site',
@@ -116,6 +110,7 @@ const en: Record<string, string> = {
   'structure.robots.pass': 'robots.txt exists',
   'structure.robots.warn': 'robots.txt not found (recommended)',
   'structure.sitemap.pass': 'sitemap.xml exists',
+  'structure.sitemap.pass_via_robots': 'sitemap found via robots.txt ({count} sitemap(s))',
   'structure.sitemap.warn': 'sitemap.xml not found (recommended)',
   'structure.links.pass': 'Homepage has {count} internal links',
   'structure.links.warn': 'Homepage has only {count} internal links (recommend more navigation)',
@@ -328,11 +323,8 @@ const zh: Record<string, string> = {
   'item.content.scale': '站点规模',
   'item.content.game_desc': '游戏描述',
   'item.content.iframe_quality': 'Iframe 质量',
-  'item.content.game_variety': '游戏多样性',
   'item.content.video_desc': '视频描述',
-  'item.content.video_variety': '视频多样性',
   'item.content.reference_entry': '参考条目完整性',
-  'item.content.reference_variety': '参考多样性',
 
   // 结构检查项
   'item.structure.internal': '内部链接',
@@ -370,12 +362,15 @@ const zh: Record<string, string> = {
   'content.subpage.pass': '所有内页正文内容充足',
   'content.subpage.warn': '{thin}/{total} 个内页正文内容不足 (<300 字)',
   'content.subpage.fail': '{thin}/{total} 个内页正文内容不足 (<300 字)',
-  'content.template.pass': '页面结构多样性正常 (相似度 {pct}%)',
-  'content.template.fail': '页面结构相似度 {pct}%，疑似模板批量生成',
+  'content.template.pass': '页面结构多样性正常 (最高相似度 {pct}%)',
+  'content.template.fail': '检测到 {count} 个页面使用相似模板（最高相似度 {pct}%，如 {a} vs {b}）',
+  'content.template.info': '骨架结构相似度 {pct}%（{count} 个页面，如 {a} vs {b}）— 属于常见的页面结构模式',
   'content.filler.pass': '未检测到明显的填充/凑字数内容',
   'content.filler.warn': '检测到 {count} 处疑似凑字数的填充内容',
-  'content.dup.pass': '各页面内容独立性良好 (重复率 {pct}%)',
-  'content.dup.warn': '{pct}% 的内容片段在多个页面重复出现',
+  'content.dup.pass': '正文原创度 {score}/100 (最大相似内容簇 {pct} 页，最高文本相似度 {jaccard}%)',
+  'content.dup.warn': '正文原创度 {score}/100 ({pct} 个页面文本高度雷同，如 {a} vs {b}，相似度 {jaccard}%)',
+  'content.dup.fail': '正文原创度仅 {score}/100 ({pct} 个页面共享相似内容，最高文本相似度 {jaccard}%，大量页面内容高度雷同)',
+  'content.dup.skip': '内容价值由 AI 分析评估',
   'content.freshness.pass': '最近有更新内容 (最新: {date})',
   'content.freshness.warn_old': '最近更新: {date}，超过 6 个月未更新',
   'content.freshness.warn_none': '页面中未检测到日期信息，无法判断内容时效性',
@@ -388,20 +383,14 @@ const zh: Record<string, string> = {
   'content.game_desc.warn': '{thin}/{total} 个游戏页面缺少描述文字（建议 100+ 字的玩法说明）',
   'content.iframe_quality.pass': '嵌入了 {count} 个游戏 iframe',
   'content.iframe_quality.warn': '检测到 {count} 个游戏 iframe — 确保每个都有 title 和合理尺寸',
-  'content.game_variety.pass': '游戏页面多样性正常',
-  'content.game_variety.warn': '游戏页面相似度 {pct}% — 可能是模板批量生成',
 
   // 视频站专用消息
   'content.video_desc.pass': '{total} 个视频页面有足够的描述文字',
   'content.video_desc.warn': '{thin}/{total} 个视频页面缺少描述文字（建议 50+ 字）',
-  'content.video_variety.pass': '视频页面多样性正常 (相似度 {pct}%)',
-  'content.video_variety.warn': '视频页面相似度 {pct}% — 可能是模板批量生成',
 
   // 参考站专用消息
   'content.reference_entry.pass': '参考条目具有足够的结构和元数据',
   'content.reference_entry.warn': '{thin}/{total} 个参考条目结构不足（建议 100+ 字）',
-  'content.reference_variety.pass': '参考页面多样性正常 (相似度 {pct}%)',
-  'content.reference_variety.warn': '参考页面相似度 {pct}% — 结构化条目属于正常',
 
   // 站点类型检测
   'detector.type.content': '内容站',
@@ -423,6 +412,7 @@ const zh: Record<string, string> = {
   'structure.robots.pass': 'robots.txt 存在',
   'structure.robots.warn': '未找到 robots.txt（建议添加）',
   'structure.sitemap.pass': 'sitemap.xml 存在',
+  'structure.sitemap.pass_via_robots': '通过 robots.txt 找到站点地图 ({count} 个)',
   'structure.sitemap.warn': '未找到 sitemap.xml（建议添加）',
   'structure.links.pass': '首页有 {count} 个内部链接',
   'structure.links.warn': '首页仅 {count} 个内部链接（建议增加导航链接）',

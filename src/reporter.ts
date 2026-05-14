@@ -68,11 +68,11 @@ export function renderTerminalReport(report: CheckReport): string {
     const confColor = s.confidence === 'high' ? chalk.green : s.confidence === 'medium' ? chalk.yellow : chalk.red;
     if (typeof s.pagesAnalyzed === 'number') {
       const aiPart = typeof s.aiAnalyzed === 'number' && s.aiAnalyzed > 0 ? `, ${s.aiAnalyzed} AI-analyzed` : '';
-      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${s.pagesAnalyzed} ${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
+      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${s.pagesAnalyzed} ${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: String(s.confidence) }))}`));
     } else {
       // Backward compat for old format
       const aiPart = typeof s.aiAnalyzed === 'number' && s.aiAnalyzed > 0 ? `, ${s.aiAnalyzed} AI` : '';
-      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${(s.sampledCount as number) ?? (s.pagesAnalyzed as number) ?? '?'} analyzed${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: s.confidence }))}`));
+      lines.push(chalk.gray(`  ${t('reporter.pages_label', lang)}: ${(s.sampledCount as number) ?? (s.pagesAnalyzed as number) ?? '?'} analyzed${aiPart}, ${confColor(t('reporter.confidence', lang, { confidence: String(s.confidence) }))}`));
     }
   }
 

@@ -164,10 +164,10 @@ export async function getSitemapFromRobots(origin: string): Promise<string[]> {
 export async function checkSitemap(origin: string): Promise<boolean> {
   try {
     const resp = await fetch(`${origin}/sitemap.xml`);
-    return resp.ok;
-  } catch {
-    return false;
-  }
+    if (resp.ok) return true;
+  } catch {}
+  const robotsSitemaps = await getSitemapFromRobots(origin);
+  return robotsSitemaps.length > 0;
 }
 
 // Technical/non-content URL patterns to exclude from crawling

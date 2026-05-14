@@ -14,23 +14,60 @@ function extractMainContent(text: string, allPageTexts: string[]): string {
   }).join('\n\n');
 }
 
-function detectTemplatePages(pages: Array<{ url: string; text: string }>): { isTemplate: boolean; similarity: number } {
-  if (pages.length < 3) return { isTemplate: false, similarity: 0 };
-  const structures = pages.map(p =>
-    p.text.replace(/[a-zA-Z一-鿿]+/g, 'W').replace(/\d+/g, 'N').replace(/\s+/g, ' ').slice(0, 1000)
-  );
-  let total = 0, pairs = 0;
-  for (let i = 0; i < structures.length; i++) {
-    for (let j = i + 1; j < structures.length; j++) {
-      const longer = structures[i].length > structures[j].length ? structures[i] : structures[j];
-      const shorter = structures[i].length > structures[j].length ? structures[j] : structures[i];
+function detectTemplatePages(pages: Array<{ url: string; text: string }>): {
+  isTemplate: boolean;
+  similarity: number;
+  clusterCount: number;
+  maxPair: [string, string];
+} {
+  if (pages.length < 3) return { isTemplate: false, similarity: 0, clusterCount: 0, maxPair: ['', ''] };
+
+  const skeletons = pages.map(p => ({
+    url: p.url,
+    text: p.text.replace(/[a-zA-Z一-鿿]+/g, 'W').replace(/\d+/g, 'N').replace(/\s+/g, ' ').slice(0, 1000),
+  }));
+
+  const SIM_THRESHOLD = 0.6;
+  let maxSim = 0;
+  let maxPair: [string, string] = ['', ''];
+  const edges: Array<[number, number]> = [];
+
+  for (let i = 0; i < skeletons.length; i++) {
+    for (let j = i + 1; j < skeletons.length; j++) {
+      const a = skeletons[i].text;
+      const b = skeletons[j].text;
+      const longer = a.length > b.length ? a : b;
+      const shorter = a.length > b.length ? b : a;
+      if (longer.length === 0) continue;
       let common = 0;
       for (let k = 0; k < shorter.length; k++) { if (shorter[k] === longer[k]) common++; }
-      total += common / longer.length; pairs++;
+      const sim = common / longer.length;
+      if (sim > maxSim) { maxSim = sim; maxPair = [skeletons[i].url, skeletons[j].url]; }
+      if (sim >= SIM_THRESHOLD) edges.push([i, j]);
     }
   }
-  const sim = pairs > 0 ? total / pairs : 0;
-  return { isTemplate: sim > 0.6, similarity: Math.round(sim * 100) };
+
+  // Union-Find to build connected components
+  const parent = new Array(skeletons.length).fill(0).map((_, i) => i);
+  const find = (x: number): number => parent[x] === x ? x : (parent[x] = find(parent[x]));
+  const union = (a: number, b: number) => { parent[find(a)] = find(b); };
+  for (const [i, j] of edges) union(i, j);
+
+  // Largest cluster size
+  const clusterSizes = new Map<number, number>();
+  for (let i = 0; i < skeletons.length; i++) {
+    const root = find(i);
+    clusterSizes.set(root, (clusterSizes.get(root) || 0) + 1);
+  }
+  let clusterCount = 0;
+  for (const size of clusterSizes.values()) { if (size > clusterCount) clusterCount = size; }
+
+  return {
+    isTemplate: maxSim > SIM_THRESHOLD && clusterCount >= 3,
+    similarity: Math.round(maxSim * 100),
+    clusterCount,
+    maxPair,
+  };
 }
 
 function checkFreshness(pages: Array<{ url: string; text: string }>): { hasRecent: boolean; latestDate: string; stalePages: string[] } {
@@ -72,24 +109,82 @@ function checkFreshness(pages: Array<{ url: string; text: string }>): { hasRecen
 function checkTemplateDetection(pages: Array<{ url: string; text: string }>, lang: Lang): CheckItem | null {
   if (pages.length < 3) return null;
   const tpl = detectTemplatePages(pages);
-  return { name: t('item.content.template', lang), status: tpl.isTemplate ? 'fail' : 'pass', message: t(tpl.isTemplate ? 'content.template.fail' : 'content.template.pass', lang, { pct: tpl.similarity }) };
+  const a = tpl.maxPair[0] ? new URL(tpl.maxPair[0]).pathname : '';
+  const b = tpl.maxPair[1] ? new URL(tpl.maxPair[1]).pathname : '';
+  // Informational only — skeleton templating is a normal web dev technique
+  return { name: t('item.content.template', lang), status: 'pass', message: t('content.template.info', lang, { pct: tpl.similarity, count: tpl.clusterCount, a, b }) };
 }
 
-function checkCrossPageDuplication(pages: Array<{ url: string; text: string }>, lang: Lang): CheckItem | null {
-  if (pages.length <= 1) return null;
-  const chunkSize = 200;
-  let dup = 0;
-  const chunks = new Set<string>();
-  for (const page of pages) {
-    const text = page.text.replace(/\s+/g, ' ');
-    for (let i = 0; i < text.length - chunkSize; i += chunkSize) {
-      const c = text.slice(i, i + chunkSize);
-      if (chunks.has(c)) dup++; else chunks.add(c);
+/**
+ * Detect cross-page text duplication after removing boilerplate.
+ * Uses word-level n-gram Jaccard similarity on the unique content
+ * (after extractMainContent removes shared nav/footer/etc).
+ *
+ * This measures how similar the page texts are — a structural signal.
+ * It does NOT judge content value; that is left to AI analysis.
+ */
+function checkCrossPageDuplication(pages: Array<{ url: string; text: string }>, lang: Lang): { item: CheckItem; score: number } {
+  if (pages.length <= 1) return { item: { name: t('item.content.dup', lang), status: 'pass', message: t('content.dup.skip', lang) }, score: 100 };
+
+  const allTexts = pages.map(p => p.text);
+  const mainTexts = pages.map(p => extractMainContent(p.text, allTexts));
+
+  // Word-level 4-gram Jaccard similarity
+  function getNgrams(text: string): string[] {
+    const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+    const n = 4;
+    if (words.length < n) return words;
+    const ngrams: string[] = [];
+    for (let i = 0; i <= words.length - n; i++) ngrams.push(words.slice(i, i + n).join(' '));
+    return ngrams;
+  }
+
+  function jaccard(a: string[], b: string[]): number {
+    if (a.length === 0 && b.length === 0) return 0;
+    const sa = new Set(a), sb = new Set(b);
+    const inter = [...sa].filter(x => sb.has(x)).length;
+    const union = new Set([...sa, ...sb]).size;
+    return union > 0 ? inter / union : 0;
+  }
+
+  // Find the pair with highest Jaccard similarity
+  let maxJaccard = 0;
+  let maxPair: [string, string] = ['', ''];
+  const ngrams = mainTexts.map(getNgrams);
+
+  for (let i = 0; i < pages.length; i++) {
+    for (let j = i + 1; j < pages.length; j++) {
+      if (ngrams[i].length < 3 || ngrams[j].length < 3) continue;
+      const sim = jaccard(ngrams[i], ngrams[j]);
+      if (sim > maxJaccard) { maxJaccard = sim; maxPair = [pages[i].url, pages[j].url]; }
     }
   }
-  const total = pages.reduce((s, p) => s + Math.max(1, Math.floor(p.text.replace(/\s+/g, ' ').length / chunkSize)), 0);
-  const pct = total > 0 ? Math.round(dup / total * 100) : 0;
-  return { name: t('item.content.dup', lang), status: pct > 30 ? 'warn' : 'pass', message: t(pct > 30 ? 'content.dup.warn' : 'content.dup.pass', lang, { pct }) };
+
+  const jaccardPct = Math.round(maxJaccard * 100);
+  // Score: high similarity = potential duplication, but not a fail by itself
+  const score = Math.max(0, Math.min(100, Math.round(100 * (1 - maxJaccard))));
+
+  const aPath = (() => { try { return new URL(maxPair[0]).pathname; } catch { return maxPair[0]; } })();
+  const bPath = (() => { try { return new URL(maxPair[1]).pathname; } catch { return maxPair[1]; } })();
+
+  if (jaccardPct >= 60) {
+    return {
+      item: {
+        name: t('item.content.dup', lang),
+        status: 'warn',
+        message: t('content.dup.warn', lang, { score, pct: jaccardPct, a: aPath, b: bPath, jaccard: jaccardPct }),
+      },
+      score,
+    };
+  }
+  return {
+    item: {
+      name: t('item.content.dup', lang),
+      status: 'pass',
+      message: t('content.dup.pass', lang, { score, pct: 0, a: aPath, b: bPath, jaccard: jaccardPct }),
+    },
+    score,
+  };
 }
 
 function checkFreshnessItem(pages: Array<{ url: string; text: string }>, lang: Lang): CheckItem {
@@ -206,16 +301,6 @@ function checkGameSite(
     });
   }
 
-  // 3. Game Variety — check if game pages have sufficient diversity
-  if (subpages.length >= 3) {
-    const tpl = detectTemplatePages(subpages);
-    items.push({
-      name: t('item.content.game_variety', lang),
-      status: tpl.isTemplate ? 'warn' : 'pass',
-      message: t(tpl.isTemplate ? 'content.game_variety.warn' : 'content.game_variety.pass', lang, { pct: tpl.similarity }),
-    });
-  }
-
   return items;
 }
 
@@ -248,16 +333,6 @@ function checkVideoSite(
         : { name: t('item.content.video_desc', lang), status: 'pass', message: t('content.video_desc.pass', lang, { total: subpages.length }) }
       );
     }
-  }
-
-  // 2. Video Variety — check if video pages have sufficient diversity
-  if (subpages.length >= 3) {
-    const tpl = detectTemplatePages(subpages);
-    items.push({
-      name: t('item.content.video_variety', lang),
-      status: tpl.isTemplate ? 'warn' : 'pass',
-      message: t(tpl.isTemplate ? 'content.video_variety.warn' : 'content.video_variety.pass', lang, { pct: tpl.similarity }),
-    });
   }
 
   return items;
@@ -294,16 +369,6 @@ function checkReferenceSite(
     }
   }
 
-  // 2. Reference variety — warn at 70% similarity (higher threshold than game/video)
-  if (subpages.length >= 3) {
-    const tpl = detectTemplatePages(subpages);
-    items.push({
-      name: t('item.content.reference_variety', lang),
-      status: tpl.similarity > 70 ? 'warn' : 'pass',
-      message: t(tpl.similarity > 70 ? 'content.reference_variety.warn' : 'content.reference_variety.pass', lang, { pct: tpl.similarity }),
-    });
-  }
-
   return items;
 }
 
@@ -315,7 +380,7 @@ export function checkContentQuality(
   lang: Lang,
   siteType: SiteType = 'content',
   pagesSignals?: Array<{ iframeCount: number; iframeSrcs: string[]; canvasCount: number; textLength: number }>
-): CheckCategory {
+): { category: CheckCategory; contentDuplicationScore: number } {
   const items: CheckItem[] = [];
 
   if (siteType === 'game') {
@@ -342,13 +407,14 @@ export function checkContentQuality(
   const tplItem = checkTemplateDetection(pages, lang);
   if (tplItem) items.push(tplItem);
 
-  const dupItem = checkCrossPageDuplication(pages, lang);
-  if (dupItem) items.push(dupItem);
+  const dupResult = checkCrossPageDuplication(pages, lang);
+  items.push(dupResult.item);
+  const contentDuplicationScore = dupResult.score;
 
   items.push(checkFreshnessItem(pages, lang));
 
   const scaleItem = checkSiteScale(sitePageCount, lang);
   if (scaleItem) items.push(scaleItem);
 
-  return { name: t('cat.content', lang), items };
+  return { category: { name: t('cat.content', lang), items }, contentDuplicationScore };
 }

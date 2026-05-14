@@ -215,7 +215,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Normalize URLs before dedup (strip trailing slash, hash) to avoid
     // different URL strings resolving to the same page during concurrent crawl
-    const normalizeUrl = (u: string) => u.replace(/\/+$/, '').split('#')[0];
+    const normalizeUrl = (u: string) => u.split('#')[0].replace(/\/+$/, '');
     const dedupedMap = new Map<string, string>();
     for (const link of allInternal) {
       const norm = normalizeUrl(link);
@@ -224,7 +224,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const uniqueLinks = [...dedupedMap.values()].slice(0, phase1Limit);
 
     const deadLinks: string[] = [];
-    const crawledUrls = new Set([homeData.url.replace(/\/+$/, '')]);
+    const crawledUrls = new Set([homeData.url.split('#')[0].replace(/\/+$/, '')]);
 
     async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[]; lang: string } | null> {
       const norm = link.replace(/\/+$/, '').split('#')[0];
@@ -292,7 +292,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     timing.end();
 
     // Pages already successfully crawled (non-null results)
-    const uniquePagesForSampling = pages.map(p => p.url.replace(/\/+$/, '').split('#')[0]);
+    const uniquePagesForSampling = pages.map(p => p.url.split('#')[0].replace(/\/+$/, ''));
 
     // Stratified sampling: classify all URLs, pick required pages first, then distribute remaining budget by type
     const classifiedUrls = allInternal.map(u => ({ url: u, type: classifyPage(u) }));
@@ -370,7 +370,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // Deduplicate
     const seen = new Set<string>();
     const uniquePages = pages.filter(p => {
-      const norm = p.url.replace(/\/+$/, '').split('#')[0];
+      const norm = p.url.split('#')[0].replace(/\/+$/, '');
       if (seen.has(norm)) return false; seen.add(norm); return true;
     });
 
@@ -402,7 +402,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const allCategories: CheckCategory[] = [];
 
     // Content quality → soft
-    const contentCat = checkContentQuality(uniquePages, allInternal.length, lang, siteType, allSignals);
+    const contentResult = checkContentQuality(uniquePages, allInternal.length, lang, siteType, allSignals);
+    const contentCat = contentResult.category;
+    const contentDuplicationScore = contentResult.contentDuplicationScore;
     // Extract site scale → hard (it's a hard requirement: min 10 pages)
     const scaleItem = contentCat.items.find(i => i.name === t('item.content.scale', lang));
     const contentItems = scaleItem ? contentCat.items.filter(i => i !== scaleItem) : contentCat.items;
@@ -524,7 +526,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Compute composite score with AI value scoring
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
-    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses);
+    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses, contentDuplicationScore);
 
     // Per-dimension averages and stats (generic, iterates over all dimensions)
     const DIMENSION_KEYS: Array<{ key: 'valueScore' | 'originalityScore' | 'relevanceScore' | 'complianceScore' | 'translationScore'; name: string }> = [
