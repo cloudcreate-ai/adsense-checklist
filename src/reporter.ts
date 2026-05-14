@@ -177,9 +177,8 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.gray(`  │`));
 
   // Composite breakdown
-  const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
-  const softContrib = Math.round(report.softScore * 0.6);
-  lines.push(chalk.gray(`  │  ${t('reporter.formula_label', lang, { hardPct: Math.round(hardContrib), softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`));
+  const hardPassRate = report.hardStatus === 'ready' ? 100 : Math.round(report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length) * 100);
+  lines.push(chalk.gray(`  │  ${t('reporter.formula_label_geo', lang, { hardPct: hardPassRate, softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`));
   if (report.siteAiScore > 0) {
     lines.push(chalk.gray(`  │  ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
   }
@@ -206,8 +205,11 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(chalk.gray(`  └─`));
   lines.push('');
 
-  // Detailed checks
-  for (const cat of report.categories) {
+  // Detailed checks — show landing page category first, then others
+  const landingCat = report.categories.find(c => c.name.includes('落地页') || c.name.includes('Landing'));
+  const otherCats = report.categories.filter(c => c !== landingCat);
+  const orderedCats = landingCat ? [landingCat, ...otherCats] : otherCats;
+  for (const cat of orderedCats) {
     lines.push(chalk.bold(`  ${cat.name}`));
     for (const item of cat.items) {
       lines.push(`    ${ICONS[item.status]} [${LABELS[item.status]}] ${item.message}`);
@@ -219,25 +221,41 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push('');
   }
 
-  // Page details
+  // Page details — group by page type
   if (report.pages.length > 0) {
     lines.push(chalk.bold(`  ${t('report.page_details', lang)}`));
     lines.push(chalk.gray(`  (${t('report.pages', lang, { count: report.pages.length })})`));
     lines.push('');
 
-    // Filter out required/utility pages from problems list — they are scored differently
-    const problems = report.pages.filter(p =>
-      (p.pageType !== 'required' && p.pageType !== 'utility')
-      && (p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'))
-    );
-    const ok = report.pages.filter(p =>
-      (p.pageType === 'required' || p.pageType === 'utility')
-      || (p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'))
-    );
+    const typeOrder = ['homepage', 'listing', 'reference_listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility', 'unknown'];
+    const typeLabels: Record<string, string> = {
+      homepage: '🏠 首页',
+      listing: '📋 列表页',
+      reference_listing: '📋 参考列表',
+      content: '📝 内容页',
+      game_detail: '🎮 游戏详情页',
+      video_detail: '📺 视频详情页',
+      reference_detail: '📚 参考详情页',
+      required: '📄 必要页面',
+      utility: '🔧 实用页面',
+      unknown: '❓ 未知类型',
+    };
 
-    for (const p of problems) renderPage(lines, p, lang);
-    if (ok.length > 0) lines.push(chalk.gray(`    ${t('report.pages_ok', lang, { count: ok.length })}`));
-    lines.push('');
+    const grouped = new Map<string, PageDetail[]>();
+    for (const p of report.pages) {
+      const type = p.pageType || 'unknown';
+      if (!grouped.has(type)) grouped.set(type, []);
+      grouped.get(type)!.push(p);
+    }
+
+    for (const type of typeOrder) {
+      const pages = grouped.get(type);
+      if (!pages || pages.length === 0) continue;
+      const label = typeLabels[type] || type;
+      lines.push(chalk.bold(`  ${label} (${pages.length})`));
+      for (const p of pages) renderPage(lines, p, lang);
+      lines.push('');
+    }
   }
 
   // AI suggestion when AI is not enabled
@@ -504,83 +522,110 @@ export function renderMarkdownReport(report: CheckReport): string {
   }
 
   // Composite formula
-  const hardContrib = Math.round(report.hardStatus === 'ready' ? 100 * 0.4 : (report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length)) * 100 * 0.4);
-  lines.push(`> ${t('md.formula', lang, { hardPct: Math.round(hardContrib), softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`);
+  const hardPassRate = report.hardStatus === 'ready' ? 100 : Math.round(report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length) * 100);
+  lines.push(`> ${t('md.formula_geo', lang, { hardPct: hardPassRate, softPct: report.softScore, penalty: report.warningPenalty, total: report.compositeScore })}`);
   lines.push('');
 
-  // Page details
+  // Page details — group by page type
   if (report.pages.length > 0) {
-    lines.push(`### ${t('md.page_details', lang)} (${t('md.pages_count', lang, { count: report.pages.length })})`);
+    lines.push(`### ${t('md.page_details', lang)}`);
     lines.push('');
 
-    // Filter out required/utility pages from problems list — they are scored differently
-    const problems = report.pages.filter(p =>
-      (p.pageType !== 'required' && p.pageType !== 'utility')
-      && (p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'))
-    );
-    const ok = report.pages.filter(p =>
-      (p.pageType === 'required' || p.pageType === 'utility')
-      || (p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'))
-    );
+    const typeOrder = ['homepage', 'listing', 'reference_listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility', 'unknown'];
+    const typeLabels: Record<string, string> = {
+      homepage: '🏠 首页',
+      listing: '📋 列表页',
+      reference_listing: '📋 参考列表',
+      content: '📝 内容页',
+      game_detail: '🎮 游戏详情页',
+      video_detail: '📺 视频详情页',
+      reference_detail: '📚 参考详情页',
+      required: '📄 必要页面',
+      utility: '🔧 实用页面',
+      unknown: '❓ 未知类型',
+    };
 
-    // Table header
-    lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.type', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | T | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
-    lines.push(`|------|------|------|------|--------|---|---|---|---|---|--------|------|`);
-
-    for (const p of [...problems, ...ok]) {
-      const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-      const status = MD_ICONS[p.contentStatus];
-      const ai = p.ai;
-      const v = ai?.valueScore != null ? ai.valueScore : '-';
-      const o = ai?.originalityScore != null ? ai.originalityScore : '-';
-      const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
-      const c = ai?.complianceScore != null ? ai.complianceScore : '-';
-      const t_ = ai?.translationScore != null ? ai.translationScore : '-';
-      const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null && ai?.translationScore != null)
-        ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore * ai.translationScore, 0.2) * 10)
-        : ((ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
-          ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
-          : '-');
-      lines.push(`| ${status} | ${p.pageType} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${t_} | ${aiComposite} | ${p.title} |`);
+    const grouped = new Map<string, PageDetail[]>();
+    for (const p of report.pages) {
+      const type = p.pageType || 'unknown';
+      if (!grouped.has(type)) grouped.set(type, []);
+      grouped.get(type)!.push(p);
     }
-    lines.push('');
 
-    // Detailed issues for problem pages
-    const detailPages = problems.filter(p => p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
-    if (detailPages.length > 0) {
-      lines.push(`#### ${t('md.problem_pages', lang)}`);
+    for (const type of typeOrder) {
+      const pages = grouped.get(type);
+      if (!pages || pages.length === 0) continue;
+      const label = typeLabels[type] || type;
+      lines.push(`#### ${label} (${pages.length})`);
       lines.push('');
-      for (const p of detailPages) {
+
+      // Filter problems within this group
+      const problems = pages.filter(p =>
+        (p.pageType !== 'required' && p.pageType !== 'utility')
+        && (p.contentStatus !== 'pass' || p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'))
+      );
+      const ok = pages.filter(p =>
+        (p.pageType === 'required' || p.pageType === 'utility')
+        || (p.contentStatus === 'pass' && p.issues.length === 0 && (!p.ai || p.ai.status === 'pass'))
+      );
+
+      // Table header
+      lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | T | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
+      lines.push(`|------|------|------|--------|---|---|---|---|---|--------|------|`);
+
+      for (const p of [...problems, ...ok]) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-        const hasTranslation = p.ai?.translationScore != null;
-        const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null && p.ai?.translationScore != null)
-          ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore * p.ai.translationScore, 0.2) * 10)
-          : ((p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
-            ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
-            : null);
-        const scoreLabels = aiComposite != null
-          ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: AI ${aiComposite}/100`
-          : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
-        lines.push(`**[${path}](${p.url})** (${scoreLabels})`);
-        lines.push('');
-        for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
-        if (p.ai) {
-          const ai = p.ai;
-          lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${ai.status}`);
-          if (ai.valueScore != null) {
-            lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}**`);
-            const geoMean = hasTranslation && ai.translationScore != null
-              ? Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5) * (ai.translationScore ?? 5), 0.2) * 10)
-              : Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
-            lines.push(`- ${t('md.ai_composite_score', lang)}: ${geoMean}/100（${t('md.geometric_mean', lang)}）`);
+        const status = MD_ICONS[p.contentStatus];
+        const ai = p.ai;
+        const v = ai?.valueScore != null ? ai.valueScore : '-';
+        const o = ai?.originalityScore != null ? ai.originalityScore : '-';
+        const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
+        const c = ai?.complianceScore != null ? ai.complianceScore : '-';
+        const t_ = ai?.translationScore != null ? ai.translationScore : '-';
+        const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null && ai?.translationScore != null)
+          ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore * ai.translationScore, 0.2) * 10)
+          : ((ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
+            ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
+            : '-');
+        lines.push(`| ${status} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${t_} | ${aiComposite} | ${p.title} |`);
+      }
+      lines.push('');
+
+      // Detailed issues for problem pages
+      const detailPages = problems.filter(p => p.issues.length > 0 || (p.ai && p.ai.status !== 'pass'));
+      if (detailPages.length > 0) {
+        for (const p of detailPages) {
+          const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
+          const hasTranslation = p.ai?.translationScore != null;
+          const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null && p.ai?.translationScore != null)
+            ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore * p.ai.translationScore, 0.2) * 10)
+            : ((p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
+              ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
+              : null);
+          const scoreLabels = aiComposite != null
+            ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: AI ${aiComposite}/100`
+            : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
+          lines.push(`**[${path}](${p.url})** (${scoreLabels})`);
+          lines.push('');
+          for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
+          if (p.ai) {
+            const ai = p.ai;
+            lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${ai.status}`);
+            if (ai.valueScore != null) {
+              lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}**`);
+              const geoMean = hasTranslation && ai.translationScore != null
+                ? Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5) * (ai.translationScore ?? 5), 0.2) * 10)
+                : Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
+              lines.push(`- ${t('md.ai_composite_score', lang)}: ${geoMean}/100（${t('md.geometric_mean', lang)}）`);
+            }
+            lines.push(`- ${t('md.assessment', lang)}: ${ai.assessment}`);
+            if (ai.suggestions.length > 0) {
+              lines.push(`- ${t('md.suggestions', lang)}:`);
+              for (const s of ai.suggestions.slice(0, 3)) lines.push(`  - ${s}`);
+            }
           }
-          lines.push(`- ${t('md.assessment', lang)}: ${ai.assessment}`);
-          if (ai.suggestions.length > 0) {
-            lines.push(`- ${t('md.suggestions', lang)}:`);
-            for (const s of ai.suggestions.slice(0, 3)) lines.push(`  - ${s}`);
-          }
+          lines.push('');
         }
-        lines.push('');
       }
     }
   }

@@ -157,17 +157,13 @@ function categoryPassRate(category: CheckCategory): number {
 // ─── Composite score ───────────────────────────────────────────────
 
 // Soft category weights (must sum to 1.0)
-// AI value analysis: 45%, Content quality: 35%, User experience: 10%, Page quality: 10%
+// AI value analysis: 60%, Content quality: 20%, User experience: 10%, Page quality: 10%
 const SOFT_CAT_WEIGHTS: Record<string, number> = {
-  aiValue: 0.45,
-  contentQuality: 0.35,
+  aiValue: 0.60,
+  contentQuality: 0.20,
   userExperience: 0.10,
   pageQuality: 0.10,
 };
-
-// Composite: hard * 0.4 + soft * 0.6
-const HARD_COMPOSITE_WEIGHT = 0.4;
-const SOFT_COMPOSITE_WEIGHT = 0.6;
 
 export interface CompositeResult {
   compositeScore: number;
@@ -248,8 +244,8 @@ export function computeCompositeScore(
   const warningRatio = totalAll > 0 ? totalWarn / totalAll : 0;
   const warningPenalty = warningRatio > 0.15 ? Math.round((warningRatio - 0.15) * 100) : 0;
 
-  // 5. Composite
-  const base = hardPassRate * HARD_COMPOSITE_WEIGHT + softScore * SOFT_COMPOSITE_WEIGHT;
+  // 5. Composite: geometric mean of hard pass rate and soft score
+  const base = Math.round(Math.sqrt(hardPassRate * softScore));
   const compositeScore = Math.min(100, Math.max(0, Math.round(base - warningPenalty)));
 
   // Category scores for display

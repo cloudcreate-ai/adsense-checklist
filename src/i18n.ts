@@ -33,6 +33,9 @@ const en: Record<string, string> = {
   'item.perf.overflow': 'Mobile Overflow',
   'item.perf.font': 'Mobile Font Size',
   'item.perf.popup': 'Popup Detection',
+  'item.perf.heading': 'Heading Hierarchy',
+  'item.perf.nav': 'Navigation Elements',
+  'item.perf.touch': 'Touch Target Size',
 
   // Policy items
   'item.policy.keywords': 'Violating Keywords',
@@ -114,9 +117,11 @@ const en: Record<string, string> = {
   'structure.sitemap.warn': 'sitemap.xml not found (recommended)',
   'structure.links.pass': 'Homepage has {count} internal links',
   'structure.links.warn': 'Homepage has only {count} internal links (recommend more navigation)',
-  'structure.deadlinks.pass': 'No broken links detected',
-  'structure.deadlinks.warn': '{count} broken link(s) detected',
-  'structure.deadlinks.fail': '{count} broken link(s) detected (excessive)',
+  'structure.deadlinks.none': 'No broken links detected',
+  'structure.deadlinks.pass': '{count} broken link(s) found (4xx: {c4xx}, 5xx: {c5xx}, timeout: {ctimeout}) — always list all',
+  'structure.deadlinks.warn': '{pct}% of links broken ({count}/{total}) — 4xx: {c4xx}, 5xx: {c5xx}, timeout: {ctimeout}. Consider fixing links or re-checking from a different network.',
+  'structure.ads.pass': 'ads.txt exists',
+  'structure.ads.warn': 'ads.txt not found (recommended for AdSense)',
 
   // Performance messages
   'perf.speed.pass': 'Load time {time}s',
@@ -131,6 +136,12 @@ const en: Record<string, string> = {
   'perf.font.warn': 'Some text is smaller than 12px, hard to read on mobile',
   'perf.popup.pass': 'No intrusive popups/overlays detected',
   'perf.popup.warn': '{count} potential popup/overlay element(s) detected',
+  'perf.heading.pass': 'Heading hierarchy is well-structured',
+  'perf.heading.warn': 'Heading level skipping detected (e.g., h1 → h4) — improves accessibility',
+  'perf.nav.pass': 'Navigation elements found',
+  'perf.nav.warn': 'No navigation/menu elements detected — may impact user experience',
+  'perf.touch.pass': 'Touch targets are adequately sized ({pct}% too small)',
+  'perf.touch.warn': '{pct}% of interactive elements are smaller than 48px (Google mobile UX guideline)',
 
   // Policy messages
   'policy.keywords.pass': 'No policy-violating keywords found',
@@ -175,6 +186,8 @@ const en: Record<string, string> = {
   // Group labels
   'group.required_pages': 'Required Pages',
   'group.basic_structure': 'Basic Structure',
+  'group.site_structure': 'Site Structure',
+  'group.landing_page': 'Landing Page',
   'group.performance_min': 'Performance Baseline',
   'group.policy': 'Policy Compliance',
   'group.site_scale': 'Site Scale',
@@ -225,6 +238,7 @@ const en: Record<string, string> = {
   'reporter.dim_avg_label': 'avg',
   'reporter.dim_min_label': 'min',
   'reporter.formula_label': 'Hard {hardPct}% × 0.4 + Soft {softPct}% × 0.6 - Penalty {penalty} = {total}',
+  'reporter.formula_label_geo': '√(Hard {hardPct}% × Soft {softPct}%) - Penalty {penalty} = {total}',
   'reporter.mechanical_label': 'Base Score',
   'reporter.advanced_label': 'Advanced Score',
   'report.approval_title': 'Approval Probability',
@@ -257,6 +271,7 @@ const en: Record<string, string> = {
   'md.soft_scoring': 'Smart Scoring',
   'md.ai_value_title': 'Value Analysis',
   'md.formula': 'Hard {hardPct}% × 0.4 + Soft {softPct}% × 0.6 - Penalty {penalty} = {total}',
+  'md.formula_geo': '√(Hard {hardPct}% × Soft {softPct}%) - Penalty {penalty} = {total}',
   'md.verdict_title': 'Review Verdict',
   'md.table.dimension': 'Dimension',
   'md.table.avg_score': 'Avg Score',
@@ -417,8 +432,11 @@ const zh: Record<string, string> = {
   'structure.sitemap.warn': '未找到 sitemap.xml（建议添加）',
   'structure.links.pass': '首页有 {count} 个内部链接',
   'structure.links.warn': '首页仅 {count} 个内部链接（建议增加导航链接）',
-  'structure.deadlinks.pass': '未检测到死链',
-  'structure.deadlinks.warn': '检测到 {count} 个死链',
+  'structure.deadlinks.none': '未检测到死链',
+  'structure.deadlinks.pass': '发现 {count} 个无效链接（4xx: {c4xx}, 5xx: {c5xx}, 超时: {ctimeout}）',
+  'structure.deadlinks.warn': '死链占比达 {pct}%（{count}/{total}）— 4xx: {c4xx}, 5xx: {c5xx}, 超时: {ctimeout}。建议修复链接或更换网络环境重新检查。',
+  'structure.ads.pass': 'ads.txt 存在',
+  'structure.ads.warn': '未找到 ads.txt（建议添加以支持 AdSense）',
 
   // 性能消息
   'perf.speed.pass': '加载时间 {time}s',
@@ -433,6 +451,12 @@ const zh: Record<string, string> = {
   'perf.font.warn': '部分文字字号小于 12px，移动端阅读困难',
   'perf.popup.pass': '未检测到明显的弹窗/遮罩层',
   'perf.popup.warn': '检测到 {count} 个可能的弹窗/遮罩层（过多弹窗会影响审核）',
+  'perf.heading.pass': '标题层级结构合理',
+  'perf.heading.warn': '检测到标题跳级（如 H1 直接到 H4）— 影响可访问性',
+  'perf.nav.pass': '检测到导航元素',
+  'perf.nav.warn': '未检测到导航/菜单元素 — 可能影响用户体验',
+  'perf.touch.pass': '可点击目标尺寸合格（{pct}% 过小）',
+  'perf.touch.warn': '{pct}% 的可点击元素小于 48px（Google 移动端 UX 建议）',
 
   // 合规消息
   'policy.keywords.pass': '未检测到明显的违规关键词',
@@ -477,6 +501,8 @@ const zh: Record<string, string> = {
   // 分组标签
   'group.required_pages': '必要页面',
   'group.basic_structure': '基础结构',
+  'group.site_structure': '全站结构',
+  'group.landing_page': '落地页',
   'group.performance_min': '性能底线',
   'group.policy': '政策合规',
   'group.site_scale': '站点规模',
@@ -520,6 +546,7 @@ const zh: Record<string, string> = {
   'reporter.avg_per_10': '均分 /10',
   'reporter.dim_stats_label': '维度统计',
   'reporter.formula_label': '硬性 {hardPct}% × 0.4 + 智能 {softPct}% × 0.6 - 扣分 {penalty} = {total}',
+  'reporter.formula_label_geo': '√(硬性 {hardPct}% × 智能 {softPct}%) - 扣分 {penalty} = {total}',
   'reporter.mechanical_label': '基础评分',
   'reporter.advanced_label': '高级评分',
 
@@ -561,6 +588,7 @@ const zh: Record<string, string> = {
   'md.soft_scoring': '智能评分',
   'md.ai_value_title': '价值分析',
   'md.formula': '硬性 {hardPct}% × 0.4 + 智能 {softPct}% × 0.6 - 扣分 {penalty} = {total}',
+  'md.formula_geo': '√(硬性 {hardPct}% × 智能 {softPct}%) - 扣分 {penalty} = {total}',
   'md.verdict_title': '审核结论',
   'md.table.dimension': '维度',
   'md.table.avg_score': '均分',

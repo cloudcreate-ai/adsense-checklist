@@ -223,7 +223,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     }
     const uniqueLinks = [...dedupedMap.values()].slice(0, phase1Limit);
 
-    const deadLinks: string[] = [];
+    const deadLinks: Array<{ url: string; status: string }> = [];
     const crawledUrls = new Set([homeData.url.split('#')[0].replace(/\/+$/, '')]);
 
     async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[]; lang: string } | null> {
@@ -239,12 +239,12 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
           return null;
         }
         crawledUrls.add(postNorm);
-        if (data.status >= 400) { deadLinks.push(`${link} (${data.status})`); await pg.close(); return null; }
+        if (data.status >= 400) { deadLinks.push({ url: link, status: String(data.status) }); await pg.close(); return null; }
         const result = { url: data.url, text: data.text, title: data.title, links: data.links, lang: data.pageInfo?.lang ?? 'en' };
         allSignals.push(data.signals);
         await pg.close();
         return result;
-      } catch { deadLinks.push(`${link} (timeout)`); return null; }
+      } catch { deadLinks.push({ url: link, status: 'timeout' }); return null; }
     }
 
     // ── Pipeline: crawl + AI overlap ──
@@ -408,7 +408,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     // Extract site scale → hard (it's a hard requirement: min 10 pages)
     const scaleItem = contentCat.items.find(i => i.name === t('item.content.scale', lang));
     const contentItems = scaleItem ? contentCat.items.filter(i => i !== scaleItem) : contentCat.items;
-    allCategories.push({ name: contentCat.name, items: contentItems, group: 'soft' });
+
+    // Extract landing page items from content (homepage content, content ratio)
+    const landingContentNames = [t('item.content.home', lang), t('item.content.ratio', lang)];
+    const landingContentItems = contentItems.filter(i => landingContentNames.includes(i.name));
+    const siteContentItems = contentItems.filter(i => !landingContentNames.includes(i.name));
+    allCategories.push({ name: t('group.content_quality', lang), items: siteContentItems, group: 'soft' });
+    if (landingContentItems.length > 0) {
+      allCategories.push({ name: t('group.landing_page', lang), items: landingContentItems, group: 'soft' });
+    }
     if (scaleItem) {
       allCategories.push({ name: t('group.site_scale', lang), items: [scaleItem], group: 'hard' });
     }
@@ -417,11 +425,23 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const pagesCat = await checkRequiredPages({ allLinks: homeData.linkDetails, navText: homeData.navText, footerText: homeData.footerText, sitemapUrls }, lang);
     allCategories.push({ ...pagesCat, group: 'hard' });
 
-    // Structure → hard
+    // Structure → hard: split into landing page items (H1, internal links) and site-wide (robots, sitemap, dead links, ads.txt)
     const structCat = await checkSiteStructure(origin, homeData.links, h1Count, deadLinks, lang);
-    allCategories.push({ ...structCat, group: 'hard' });
+    const landingStructNames = ['H1', t('item.structure.internal', lang)];
+    const landingStructItems = structCat.items.filter(i => landingStructNames.includes(i.name));
+    const siteStructItems = structCat.items.filter(i => !landingStructNames.includes(i.name));
+    if (landingStructItems.length > 0) {
+      // Add to existing landing page category or create new one
+      const existingLanding = allCategories.find(c => c.name === t('group.landing_page', lang));
+      if (existingLanding) {
+        existingLanding.items.push(...landingStructItems);
+      } else {
+        allCategories.push({ name: t('group.landing_page', lang), items: landingStructItems, group: 'soft' });
+      }
+    }
+    allCategories.push({ name: t('group.site_structure', lang), items: siteStructItems, group: 'hard' });
 
-    // Performance → split: hard (speed, viewport, overflow) + soft (font, popup)
+    // Performance → split: landing page (speed, viewport, overflow) + site-wide UX (font, popup, heading, nav, touch)
     timing.start('perf');
     const playBrowser = await browser.launch();
     const perfPage = await browser.newPage();
@@ -430,11 +450,11 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     await perfPage.close();
     timing.end();
 
-    const hardPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
-    const hardPerfItems = perfCat.items.filter(i => hardPerfNames.includes(i.name));
-    const softPerfItems = perfCat.items.filter(i => !hardPerfNames.includes(i.name));
-    if (hardPerfItems.length > 0) allCategories.push({ name: t('group.performance_min', lang), items: hardPerfItems, group: 'hard' });
-    if (softPerfItems.length > 0) allCategories.push({ name: t('group.user_experience', lang), items: softPerfItems, group: 'soft' });
+    const landingPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
+    const landingPerfItems = perfCat.items.filter(i => landingPerfNames.includes(i.name));
+    const uxItems = perfCat.items.filter(i => !landingPerfNames.includes(i.name));
+    if (landingPerfItems.length > 0) allCategories.push({ name: t('group.performance_min', lang), items: landingPerfItems, group: 'hard' });
+    if (uxItems.length > 0) allCategories.push({ name: t('group.user_experience', lang), items: uxItems, group: 'soft' });
 
     // Policy → hard
     const policyCat = checkPolicyCompliance(uniquePages, lang);
