@@ -10,78 +10,19 @@ export interface PageCheckResult {
   weight: number;
 }
 
-function scoreFromChecks(checks: PageCheckResult[]): number {
-  if (checks.length === 0) return 100;
-  let totalWeight = 0;
-  let earnedWeight = 0;
-  for (const c of checks) {
-    totalWeight += c.weight;
-    if (c.status === 'pass') earnedWeight += c.weight;
-    else if (c.status === 'warn') earnedWeight += c.weight * 0.4;
-  }
-  return totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 100;
-}
-
 export function scorePage(
-  pageType: PageType,
-  contentChars: number,
-  contentRatio: number,
-  issues: string[],
-  siteType: SiteType,
+  _pageType: PageType,
+  _contentChars: number,
+  _contentRatio: number,
+  _issues: string[],
+  _siteType: SiteType,
   aiStatus?: CheckStatus
 ): { score: number; checks: PageCheckResult[] } {
-  const checks: PageCheckResult[] = [];
-
-  if (pageType === 'homepage') {
-    checks.push({ label: 'Content depth', status: contentChars >= 500 ? 'pass' : contentChars >= 200 ? 'warn' : 'fail', weight: 3 });
-    checks.push({ label: 'Content ratio', status: contentRatio >= 40 ? 'pass' : contentRatio >= 20 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'content') {
-    checks.push({ label: 'Content depth', status: contentChars >= 500 ? 'pass' : contentChars >= 300 ? 'warn' : 'fail', weight: 4 });
-    checks.push({ label: 'Content ratio', status: contentRatio >= 40 ? 'pass' : contentRatio >= 20 ? 'warn' : 'fail', weight: 2 });
-    if (issues.length > 0) checks.push({ label: 'Issues', status: 'warn', weight: 1 });
-  } else if (pageType === 'game_detail') {
-    if (siteType === 'game') {
-      checks.push({ label: 'Game description', status: contentChars >= 100 ? 'pass' : 'warn', weight: 3 });
-    } else {
-      checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
-    }
-    checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'video_detail') {
-    if (siteType === 'video') {
-      checks.push({ label: 'Video description', status: contentChars >= 50 ? 'pass' : 'warn', weight: 3 });
-      checks.push({ label: 'Content ratio', status: contentRatio >= 15 ? 'pass' : contentRatio >= 5 ? 'warn' : 'fail', weight: 2 });
-    } else {
-      checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
-      checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
-    }
-  } else if (pageType === 'reference_detail') {
-    if (siteType === 'reference') {
-      checks.push({ label: 'Entry completeness', status: contentChars >= 100 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 3 });
-      checks.push({ label: 'Content ratio', status: contentRatio >= 20 ? 'pass' : contentRatio >= 5 ? 'warn' : 'fail', weight: 2 });
-    } else {
-      checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 3 });
-      checks.push({ label: 'Content ratio', status: contentRatio >= 30 ? 'pass' : contentRatio >= 15 ? 'warn' : 'fail', weight: 2 });
-    }
-  } else if (pageType === 'reference_listing') {
-    checks.push({ label: 'Listing content', status: contentChars >= 200 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'listing') {
-    checks.push({ label: 'Content', status: contentChars >= 200 ? 'pass' : contentChars >= 50 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'required') {
-    checks.push({ label: 'Exists', status: contentChars > 0 ? 'pass' : 'fail', weight: 3 });
-    checks.push({ label: 'Content depth', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 2 });
-  } else if (pageType === 'utility') {
-    checks.push({ label: 'Functional', status: contentChars > 0 ? 'pass' : 'warn', weight: 1 });
-  } else {
-    checks.push({ label: 'Content', status: contentChars >= 300 ? 'pass' : contentChars >= 100 ? 'warn' : 'fail', weight: 2 });
-  }
-
-  let score = scoreFromChecks(checks);
-
-  // AI status directly affects page score
+  // Base score is always 100 — content quality is assessed by AI VOT scoring
+  let score = 100;
   if (aiStatus === 'fail') score = 0;
-  else if (aiStatus === 'warn') score = Math.min(score, 70);
-
-  return { score, checks };
+  else if (aiStatus === 'warn') score = 70;
+  return { score, checks: [] };
 }
 
 // ─── AI value scoring ──────────────────────────────────────────────

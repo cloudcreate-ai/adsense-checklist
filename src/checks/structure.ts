@@ -38,36 +38,19 @@ export async function checkSiteStructure(
   const statusTimeout = deadLinks.filter(d => d.status === 'timeout');
   const allDetailList = deadLinks.map(d => `${d.url} (${d.status})`);
 
-  // Combined navigation check: internal link count + dead link status
+  // Combined navigation check: internal link count + dead links
   if (deadCount > 0) {
     items.push({
       name: t('item.structure.internal', lang),
       status: deadRatio >= 0.2 ? 'warn' : internal.length >= 5 ? 'pass' : 'warn',
-      message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }),
-      detailList: [`${deadCount} dead links detected (${deadRatio >= 0.2 ? 'excessive' : 'acceptable'}): ${deadCount}×4xx=${status4xx.length}, 5xx=${status5xx.length}, timeout=${statusTimeout.length}`],
+      message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }) + ` — ${deadCount} dead link(s)`,
+      detailList: allDetailList,
     });
   } else {
     items.push({
       name: t('item.structure.internal', lang),
       status: internal.length >= 5 ? 'pass' : 'warn',
       message: t(internal.length >= 5 ? 'structure.links.pass' : 'structure.links.warn', lang, { count: internal.length }),
-    });
-  }
-
-  // Dead links check (only show details, not duplicate count)
-  if (deadRatio >= 0.2) {
-    items.push({
-      name: t('item.structure.deadlinks', lang),
-      status: 'warn',
-      message: t('structure.deadlinks.warn', lang, { count: deadCount, total: totalLinks, pct: Math.round(deadRatio * 100), c4xx: status4xx.length, c5xx: status5xx.length, ctimeout: statusTimeout.length }),
-      detailList: allDetailList,
-    });
-  } else if (deadCount > 0) {
-    items.push({
-      name: t('item.structure.deadlinks', lang),
-      status: 'pass',
-      message: t('structure.deadlinks.pass', lang, { count: deadCount, c4xx: status4xx.length, c5xx: status5xx.length, ctimeout: statusTimeout.length }),
-      detailList: allDetailList,
     });
   }
 

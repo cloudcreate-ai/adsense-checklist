@@ -116,17 +116,24 @@ The tool discovers URLs from sitemaps (including recursive sitemap indexes and r
 
 This approach works on any site structure — it doesn't depend on listing pages or BFS discovery.
 
-### Two-Group Scoring
+### Composite Scoring
 
-Checks are divided into **Hard Requirements** (pass/fail) and **Soft Scoring** (0-100):
+Three independent signals combine into the final score:
 
 ```
-Composite = Hard Pass Rate × 0.4 + Soft Score × 0.6 - Warning Penalty
+Composite = Page Value(VOT) × Site Quality/100 × Landing Page Quality/100
 ```
 
-- **Hard**: Site scale, required pages, structure, performance baseline, policy compliance (including AI compliance)
-- **Soft**: AI value analysis (45%), content quality (35%), user experience (10%), page quality (10%)
-- **Warning penalty**: Applied when >15% of checks are warnings
+- **Page Value (VOT)**: ∛(Value × Originality × Translation) — the core content quality signal, computed as a geometric mean of AI-evaluated dimensions across all content pages (excluding required/utility pages which don't need editorial content quality)
+- **Site-wide Quality**: Pass rate of all hard requirements + content quality + UX categories. Acts as a multiplier — good infrastructure prevents discounting, but can't make mediocre content good
+- **Landing Page Quality**: Pass rate of landing page–specific checks (H1, internal links, load speed, viewport, mobile overflow, homepage content). Also a multiplier
+- **Caps**: Any page compliance < 6 → max composite 50; avg relevance < 6 → max composite 60
+
+Compliance and relevance are excluded from the VOT mean because they're "safety" dimensions: nearly all pages score 10/10, so including them dilutes the signal from value/originality/translation. When they DO drop below threshold, the cap mechanism kicks in.
+
+#### Page Base Score
+
+Each page receives a base score of 100/100, reduced only by AI quality assessment (AI warn → max 70, AI fail → 0). Content quality is assessed entirely through the AI VOT dimensions rather than structural heuristics like character count or content ratio.
 
 ### Approval Estimation
 
@@ -196,27 +203,42 @@ eval <report>             Evaluate approval probability from existing JSON repor
   Topic: Excel translation reference — Provides Excel terminology translations for multiple languages.
   页面: 50, 50 AI-analyzed, 置信度: high
 
+  审核结论
+
   综合评分: 82/100
+  ┌─ 全站质量: 94/100
+  │  首页质量: 90/100
+  │  网页价值: 97/100
+  │
+  │  97 × 94/100 × 90/100 = 82
+  └─
 
   审核通过概率
-  机械推算: ~85% (置信度: 高)
-  快速评估: ~90% (deepseek-v4-flash)
-  深度评估: ~88% (deepseek-v4-pro)
+    初步评估: ~85% (置信度: 高)
+    AI快速评估: ~90% (deepseek-v4-flash)
+    AI专家评估: ~88% (deepseek-v4-pro)
 
-  ┌─ 硬性要求 ──────────────────────────────────── PASS
-  │  ✔ 站点规模             站点规模良好 (194 个页面)
-  │  ✔ About            找到 About 页面 (/about/)
-  │  ...
-  └─ 评分: READY — 所有必要项达标
+  全站质量分解 (94/100)
 
-  ┌─ 智能评分 ──────────────────────────────────── 75/100
-  │  ████████████████████ 100%  内容质量
-  │  ████████████████████ 100%  用户体验
-  │  ████████░░░░░░░░░░░░  40%  价值分析
-  │
-  │  AI 维度: 价值 7.9/10 原创 7.8/10 相关 9.8/10 合规 9.9/10 翻译 10/10
-  │  维度统计: 价值 均7.9 最低5  1/50, 2%
-  └─
+    ── 硬性要求 PASS
+
+      ✔ 站点规模             站点规模良好 (194 个页面)
+      ✔ About            找到 About 页面 (/about/)
+      ...
+      评分: READY — 所有必要项达标
+
+    ── 内容质量
+
+      ✔ 页面结构多样性良好 (最高相似度 42%)
+      ✔ 正文原创度 41/100
+      ...
+
+    ── 用户体验
+
+      ✔ 移动端字体
+      ✔ 标题层级
+      ✔ 导航元素
+      ...
 ```
 
 ### Markdown Report

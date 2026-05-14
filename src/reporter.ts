@@ -80,21 +80,20 @@ const PAGE_TYPE_ICONS: Record<string, string> = {
 
 function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   const path = (() => { try { return new URL(page.url).pathname; } catch { return page.url; } })();
-  const ratioColor = page.contentRatio >= 50 ? chalk.green : page.contentRatio >= 30 ? chalk.yellow : chalk.red;
   const scoreColor = page.score >= 80 ? chalk.green : page.score >= 50 ? chalk.yellow : chalk.red;
   const typeIcon = PAGE_TYPE_ICONS[page.pageType] || chalk.gray('?');
   const langTag = page.pageLanguage && page.pageLanguage !== 'en' ? chalk.dim(`[${page.pageLanguage.toUpperCase()}] `) : '';
-  const aiComposite = (page.ai?.valueScore != null && page.ai?.originalityScore != null && page.ai?.relevanceScore != null && page.ai?.complianceScore != null && page.ai?.translationScore != null)
-    ? Math.round(Math.pow(page.ai.valueScore * page.ai.originalityScore * page.ai.relevanceScore * page.ai.complianceScore * page.ai.translationScore, 0.2) * 10)
+  const votComposite = (page.ai?.valueScore != null && page.ai?.originalityScore != null && page.ai?.translationScore != null)
+    ? Math.round(Math.pow(page.ai.valueScore * page.ai.originalityScore * page.ai.translationScore, 1 / 3) * 10)
     : null;
-  const aiColor = aiComposite != null ? (aiComposite >= 70 ? chalk.green : aiComposite >= 40 ? chalk.yellow : chalk.red) : null;
-  const aiScoreText = aiColor ? aiColor(`AI ${aiComposite}/100`) : null;
-  const scoreLabels = aiComposite != null
-    ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${t('reporter.advanced_label', lang)}: ${aiScoreText}`
+  const votColor = votComposite != null ? (votComposite >= 70 ? chalk.green : votComposite >= 40 ? chalk.yellow : chalk.red) : null;
+  const votScoreText = votColor ? votColor(`${votComposite}/100`) : null;
+  const scoreLabels = votComposite != null
+    ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${votScoreText}`
     : `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')}`;
   lines.push(`    ${ICONS[page.contentStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} ${scoreLabels}`);
   lines.push(chalk.gray(`       ${page.title}`));
-  lines.push(`       ${t('report.content_label', lang)} ${ratioColor(page.contentRatio + '%')} (${page.contentChars}/${page.totalChars})`);
+  lines.push(`       ${t('report.content_label', lang)} ${page.contentRatio}% (${page.contentChars}/${page.totalChars})`);
   for (const issue of page.issues) lines.push(chalk.yellow(`       ! ${issue}`));
   if (page.ai) {
     const d = page.ai;
@@ -105,9 +104,9 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
     const dims = [
       dimStr('V', d.valueScore ?? 5),
       dimStr('O', d.originalityScore ?? 5),
-      dimStr('R', d.relevanceScore ?? 5),
-      dimStr('C', d.complianceScore ?? 5),
       dimStr('T', d.translationScore ?? 5),
+      dimStr('C', d.complianceScore ?? 5),
+      dimStr('R', d.relevanceScore ?? 5),
     ].join(' ');
     lines.push(`       ${ICONS[d.status]} AI: ${dims}`);
     lines.push(`       ${truncate(d.assessment, 120)}`);
@@ -167,30 +166,31 @@ export function renderTerminalReport(report: CheckReport): string {
   // ============================================================
   // 1. CONCLUSION — verdict + approval probability
   // ============================================================
-  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
-  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
   const aiProb = report.expertSummary?.probability ?? report.fastSummary?.probability ?? null;
   const aiLow = aiProb !== null && aiProb < 70;
 
-  let verdict: string;
-  if (report.hardStatus === 'fail') {
-    verdict = chalk.red.bold(`NOT READY — ${hardFailCount} ${t('report.verdict_fail_suffix', lang)}`);
-  } else if (report.hardStatus === 'warn') {
-    verdict = chalk.yellow.bold(`NEEDS FIXES — ${hardWarnCount} ${t('report.verdict_warn_suffix', lang)}`);
-  } else if (aiLow) {
-    verdict = chalk.yellow.bold(`NEEDS FIXES — ${t('report.verdict.ai_quality', lang)}`);
-  } else if (report.warned > 0) {
-    verdict = chalk.yellow.bold(`MOSTLY READY — ${t('report.mostly', lang, { count: report.warned }).replace(/^MOSTLY READY — /, '')}`);
-  } else {
-    verdict = chalk.green.bold(t('report.ready', lang));
-  }
-
   const scoreColor = report.compositeScore >= 80 ? chalk.green.bold : report.compositeScore >= 50 ? chalk.yellow.bold : chalk.red.bold;
+
+  // Itemized scores — placed right after composite score
+  const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
+  const siteColor = (report.siteQuality ?? 0) >= 80 ? chalk.green : (report.siteQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
+  const homeColor = (report.homeQuality ?? 0) >= 80 ? chalk.green : (report.homeQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
 
   lines.push(chalk.bold(`  ${t('report.section.conclusion', lang)}`));
   lines.push('');
   lines.push(`  ${t('report.composite_score', lang)}: ${scoreColor(`${report.compositeScore}/100`)}`);
-  lines.push(`  ${t('report.verdict_title', lang)}: ${verdict}`);
+  lines.push(`  ┌─ ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
+  lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
+  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
+  lines.push(chalk.gray(`  │`));
+  lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
+  if (report.pageValueEstimated) {
+    lines.push(chalk.yellow(`  │  ⚠ ${t('reporter.value_estimated_note', lang)}`));
+  }
+  if (report.warningPenalty > 0) {
+    lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
+  }
+  lines.push(chalk.gray(`  └─`));
   lines.push('');
 
   // Approval probability
@@ -221,43 +221,7 @@ export function renderTerminalReport(report: CheckReport): string {
     lines.push('');
   }
 
-  // ============================================================
-  // 2. ALGORITHM — explain the formula
-  // ============================================================
-  lines.push(chalk.bold(`  ${t('report.section.algorithm', lang)}`));
-  lines.push('');
-  lines.push(chalk.gray(`  ${t('report.algorithm_desc', lang)}`));
-  lines.push(chalk.gray(`  ${t('report.algorithm_vot', lang)}`));
-  lines.push(chalk.gray(`  ${t('report.algorithm_cap', lang)}`));
-  lines.push('');
-
-  // ============================================================
-  // 3. ITEMIZED SCORES — site quality → home quality → page value
-  // ============================================================
-  const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
-  const siteColor = (report.siteQuality ?? 0) >= 80 ? chalk.green : (report.siteQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
-  const homeColor = (report.homeQuality ?? 0) >= 80 ? chalk.green : (report.homeQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
-
-  lines.push(chalk.bold(`  ${t('report.section.itemized', lang)}`));
-  lines.push('');
-  lines.push(`  ┌─ ${t('report.composite_score', lang)}: ${scoreColor(`${report.compositeScore}/100`)}`);
-  lines.push(`  │  ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
-  lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
-  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
-  lines.push(chalk.gray(`  │`));
-  lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
-  if (report.pageValueEstimated) {
-    lines.push(chalk.yellow(`  │  ⚠ ${t('reporter.value_estimated_note', lang)}`));
-  }
-  if (report.warningPenalty > 0) {
-    lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
-  }
-  lines.push(chalk.gray(`  └─`));
-  lines.push('');
-
-  // ============================================================
-  // 4. IMPROVEMENT SUGGESTIONS — from AI value analysis
-  // ============================================================
+  // Improvement suggestions
   const aiSuggestions = collectAiSuggestions(report);
   if (aiSuggestions.length > 0) {
     lines.push(chalk.bold(`  ${t('report.section.suggestions', lang)}`));
@@ -358,10 +322,6 @@ export function renderTerminalReport(report: CheckReport): string {
           lines.push(`    ${dimColor(val)(`${t(`reporter.dim_${key}`, lang)}: ${val}/10`)}`);
         }
       }
-
-      if (report.siteAiScore > 0) {
-        lines.push(chalk.gray(`    ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
-      }
     }
     lines.push('');
   }
@@ -380,13 +340,12 @@ export function renderTerminalReport(report: CheckReport): string {
     for (const p of problemPages) {
       const path = (() => { try { return new URL(p.url).pathname; } catch { return p.url; } })();
       const langTag = p.pageLanguage && p.pageLanguage !== 'en' ? chalk.dim(`[${p.pageLanguage.toUpperCase()}] `) : '';
-      const ratioColor = p.contentRatio >= 50 ? chalk.green : p.contentRatio >= 30 ? chalk.yellow : chalk.red;
       const pageScoreColor = p.score >= 80 ? chalk.green : p.score >= 50 ? chalk.yellow : chalk.red;
       const typeIcon = PAGE_TYPE_ICONS[p.pageType] || chalk.gray('?');
 
       lines.push(`    ${ICONS[p.contentStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} — ${t('reporter.mechanical_label', lang)}: ${pageScoreColor(p.score + '/100')}`);
       lines.push(chalk.gray(`       ${p.title}`));
-      lines.push(`       ${t('report.content_label', lang)} ${ratioColor(p.contentRatio + '%')} (${p.contentChars}/${p.totalChars})`);
+      lines.push(`       ${t('report.content_label', lang)} ${p.contentRatio}% (${p.contentChars}/${p.totalChars})`);
       for (const issue of p.issues) lines.push(chalk.yellow(`       ! ${issue}`));
       if (p.ai) {
         const d = p.ai;
@@ -397,9 +356,9 @@ export function renderTerminalReport(report: CheckReport): string {
         const dims = [
           dimStr('V', d.valueScore ?? 5),
           dimStr('O', d.originalityScore ?? 5),
-          dimStr('R', d.relevanceScore ?? 5),
-          dimStr('C', d.complianceScore ?? 5),
           dimStr('T', d.translationScore ?? 5),
+          dimStr('C', d.complianceScore ?? 5),
+          dimStr('R', d.relevanceScore ?? 5),
         ].join(' ');
         lines.push(`       ${ICONS[d.status]} AI: ${dims}`);
         lines.push(`       ${truncate(d.assessment, 120)}`);
@@ -514,15 +473,16 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push('');
   lines.push(`**${t('md.composite_score_title', lang)}**: ${report.compositeScore}/100`);
   lines.push('');
-
-  if (report.hardStatus === 'fail') {
-    lines.push(t('md.summary.not_ready', lang, { count: hardFailCount }));
-  } else if (report.hardStatus === 'warn') {
-    lines.push(t('md.summary.needs_fixes', lang, { count: hardWarnCount }));
-  } else if (report.warned > 0) {
-    lines.push(t('md.summary.mostly_ready', lang, { count: report.warned }));
-  } else {
-    lines.push(t('md.summary.ready', lang));
+  lines.push(`| ${t('md.table.metric', lang)} | ${t('md.table.score', lang)} |`);
+  lines.push(`|------|------|`);
+  lines.push(`| ${t('report.composite_site', lang)} | ${Math.round(report.siteQuality ?? 0)}/100 |`);
+  lines.push(`| ${t('report.composite_home', lang)} | ${Math.round(report.homeQuality ?? 0)}/100 |`);
+  lines.push(`| ${t('report.composite_value', lang)} | ${Math.round(report.pageValueScore ?? 0)}/100 |`);
+  lines.push('');
+  lines.push(`> ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`);
+  if (report.pageValueEstimated) {
+    lines.push('');
+    lines.push(`> ⚠ ${t('reporter.value_estimated_note', lang)}`);
   }
   lines.push('');
 
@@ -531,19 +491,24 @@ export function renderMarkdownReport(report: CheckReport): string {
   const fast = report.fastSummary;
   const exp = report.expertSummary;
   if (est || fast || exp) {
-    lines.push(`### ${t('md.approval_title', lang)}`);
+    lines.push(`## ${t('md.approval_title', lang)}`);
     lines.push('');
 
     if (est) {
-      lines.push(`- **${t('md.approval_mechanical', lang)}**: ${est.probability}% (${t(`conf.${est.confidence}`, lang)})`);
+      lines.push(`### ${t('md.approval_mechanical', lang)}`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${est.probability}% (${t(`conf.${est.confidence}`, lang)})`);
       if (est.keyFactors.length > 0) {
         lines.push(`- **${t('md.approval_factors', lang)}**:`);
         for (const f of est.keyFactors.slice(0, 3)) lines.push(`  - ${f}`);
       }
+      lines.push('');
     }
 
     if (fast) {
-      lines.push(`- **${t('md.approval_fast', lang)}**: ${fast.probability}% (${fast.modelName})`);
+      lines.push(`### ${t('md.approval_fast', lang)}`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${fast.probability}% (${fast.modelName})`);
       lines.push(`- **${t('md.approval_verdict', lang)}**: ${fast.verdict}`);
       lines.push(`- **${t('md.approval_summary', lang)}**: ${fast.detailedSummary}`);
       if (fast.reasons.length > 0) {
@@ -557,7 +522,9 @@ export function renderMarkdownReport(report: CheckReport): string {
     }
 
     if (exp) {
-      lines.push(`- **${t('md.approval_expert', lang)}**: ${exp.probability}% (${exp.modelName})`);
+      lines.push(`### ${t('md.approval_expert', lang)}`);
+      lines.push('');
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${exp.probability}% (${exp.modelName})`);
       lines.push(`- **${t('md.approval_verdict', lang)}**: ${exp.verdict}`);
       lines.push(`- **${t('md.approval_summary', lang)}**: ${exp.detailedSummary}`);
       if (exp.reasons.length > 0) {
@@ -573,40 +540,7 @@ export function renderMarkdownReport(report: CheckReport): string {
     lines.push('');
   }
 
-  // ============================================================
-  // 2. ALGORITHM
-  // ============================================================
-  lines.push(`## ${t('md.section.algorithm', lang)}`);
-  lines.push('');
-  lines.push(t('md.algorithm_desc', lang));
-  lines.push('');
-  lines.push(t('md.algorithm_vot', lang));
-  lines.push('');
-  lines.push(t('md.algorithm_cap', lang));
-  lines.push('');
-
-  // ============================================================
-  // 3. ITEMIZED SCORES — site quality → home quality → page value
-  // ============================================================
-  lines.push(`## ${t('md.section.itemized', lang)}`);
-  lines.push('');
-  lines.push(`| ${t('md.table.metric', lang)} | ${t('md.table.score', lang)} |`);
-  lines.push(`|------|------|`);
-  lines.push(`| ${t('report.composite_site', lang)} | ${Math.round(report.siteQuality ?? 0)}/100 |`);
-  lines.push(`| ${t('report.composite_home', lang)} | ${Math.round(report.homeQuality ?? 0)}/100 |`);
-  lines.push(`| ${t('report.composite_value', lang)} | ${Math.round(report.pageValueScore ?? 0)}/100 |`);
-  lines.push(`| **${t('report.composite_score', lang)}** | **${report.compositeScore}/100** |`);
-  lines.push('');
-  lines.push(`> ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`);
-  if (report.pageValueEstimated) {
-    lines.push('');
-    lines.push(`> ⚠ ${t('reporter.value_estimated_note', lang)}`);
-  }
-  lines.push('');
-
-  // ============================================================
-  // 4. IMPROVEMENT SUGGESTIONS
-  // ============================================================
+  // Improvement suggestions
   const aiSuggestions = collectAiSuggestions(report);
   if (aiSuggestions.length > 0) {
     lines.push(`## ${t('md.section.suggestions', lang)}`);
@@ -720,11 +654,6 @@ export function renderMarkdownReport(report: CheckReport): string {
           lines.push(`| ${dimNames[key] ?? key} | ${val}/10 |`);
         }
       }
-
-      if (report.siteAiScore > 0) {
-        lines.push('');
-        lines.push(`**${t('md.site_ai_score', lang)}**: ${report.siteAiScore}/100`);
-      }
     }
     lines.push('');
   }
@@ -775,8 +704,8 @@ export function renderMarkdownReport(report: CheckReport): string {
       );
 
       // Table header
-      lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.path', lang)} | ${t('md.table.score', lang)} | ${t('md.table.content_ratio', lang)} | V | O | R | C | T | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
-      lines.push(`|------|------|------|--------|---|---|---|---|---|--------|------|`);
+      lines.push(`| ${t('md.table.status', lang)} | ${t('md.table.path', lang)} | V | O | T | C | R | ${t('md.table.ai_composite', lang)} | ${t('md.table.title', lang)} |`);
+      lines.push(`|------|------|---|---|---|---|---|--------|------|`);
 
       for (const p of [...problems, ...ok]) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
@@ -784,15 +713,13 @@ export function renderMarkdownReport(report: CheckReport): string {
         const ai = p.ai;
         const v = ai?.valueScore != null ? ai.valueScore : '-';
         const o = ai?.originalityScore != null ? ai.originalityScore : '-';
-        const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
-        const c = ai?.complianceScore != null ? ai.complianceScore : '-';
         const t_ = ai?.translationScore != null ? ai.translationScore : '-';
-        const aiComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null && ai?.translationScore != null)
-          ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore * ai.translationScore, 0.2) * 10)
-          : ((ai?.valueScore != null && ai?.originalityScore != null && ai?.relevanceScore != null && ai?.complianceScore != null)
-            ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.relevanceScore * ai.complianceScore, 0.25) * 10)
-            : '-');
-        lines.push(`| ${status} | [\`${path}\`](${p.url}) | ${p.score}/100 | ${p.contentRatio}% | ${v} | ${o} | ${r} | ${c} | ${t_} | ${aiComposite} | ${p.title} |`);
+        const c = ai?.complianceScore != null ? ai.complianceScore : '-';
+        const r = ai?.relevanceScore != null ? ai.relevanceScore : '-';
+        const votComposite = (ai?.valueScore != null && ai?.originalityScore != null && ai?.translationScore != null)
+          ? Math.round(Math.pow(ai.valueScore * ai.originalityScore * ai.translationScore, 1 / 3) * 10)
+          : '-';
+        lines.push(`| ${status} | [\`${path}\`](${p.url}) | ${v} | ${o} | ${t_} | ${c} | ${r} | ${votComposite} | ${p.title} |`);
       }
       lines.push('');
 
@@ -802,26 +729,23 @@ export function renderMarkdownReport(report: CheckReport): string {
         for (const p of detailPages) {
           const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
           const hasTranslation = p.ai?.translationScore != null;
-          const aiComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null && p.ai?.translationScore != null)
-            ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore * p.ai.translationScore, 0.2) * 10)
-            : ((p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.relevanceScore != null && p.ai?.complianceScore != null)
-              ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.relevanceScore * p.ai.complianceScore, 0.25) * 10)
-              : null);
-          const scoreLabels = aiComposite != null
-            ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('reporter.advanced_label', lang)}: AI ${aiComposite}/100`
+          const votComposite = (p.ai?.valueScore != null && p.ai?.originalityScore != null && p.ai?.translationScore != null)
+            ? Math.round(Math.pow(p.ai.valueScore * p.ai.originalityScore * p.ai.translationScore, 1 / 3) * 10)
+            : null;
+          const scoreLabels = votComposite != null
+            ? `${t('reporter.mechanical_label', lang)}: ${p.score}/100 | ${t('md.ai_composite_score', lang)} ${votComposite}/100`
             : `${t('reporter.mechanical_label', lang)}: ${p.score}/100`;
           lines.push(`**[${path}](${p.url})** (${scoreLabels})`);
           lines.push('');
           for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
           if (p.ai) {
             const ai = p.ai;
-            lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${ai.status}`);
+            const statusLabel = ai.status === 'pass' ? '通过' : ai.status === 'warn' ? '警告' : ai.status === 'fail' ? '失败' : ai.status;
+            lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${statusLabel}`);
             if (ai.valueScore != null) {
-              lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}**`);
-              const geoMean = hasTranslation && ai.translationScore != null
-                ? Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5) * (ai.translationScore ?? 5), 0.2) * 10)
-                : Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.relevanceScore ?? 5) * (ai.complianceScore ?? 5), 0.25) * 10);
-              lines.push(`- ${t('md.ai_composite_score', lang)}: ${geoMean}/100`);
+              lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}**`);
+              const votScore = Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.translationScore ?? 5), 1 / 3) * 10);
+              lines.push(`- ${t('md.ai_composite_score', lang)}: ${votScore}/100`);
             }
             lines.push(`- ${t('md.assessment', lang)}: ${ai.assessment}`);
             if (ai.suggestions.length > 0) {

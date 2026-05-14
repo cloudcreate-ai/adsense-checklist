@@ -73,8 +73,7 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
     // Skip content depth checks for required/utility pages — they don't need 300+ chars of editorial content
     const isFunctional = pageType === 'required' || pageType === 'utility';
     if (siteType === 'content' && !isFunctional) {
-      if (contentRatio < 30 && totalChars > 200) { issues.push(`Content ratio only ${contentRatio}%, mostly boilerplate`); contentStatus = 'fail'; }
-      if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = contentStatus === 'fail' ? 'fail' : 'warn'; }
+      if (contentChars < 300) { issues.push(`Thin content (${contentChars} chars)`); contentStatus = 'warn'; }
     }
     const { score } = scorePage(pageType, contentChars, contentRatio, issues, siteType, aiStatus);
     const detail: PageDetail = { url: page.url, title: page.title, pageType, pageLanguage: page.lang, totalChars, contentChars, contentRatio, contentStatus, issues, score };
@@ -409,8 +408,8 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const scaleItem = contentCat.items.find(i => i.name === t('item.content.scale', lang));
     const contentItems = scaleItem ? contentCat.items.filter(i => i !== scaleItem) : contentCat.items;
 
-    // Extract landing page items from content (homepage content, content ratio)
-    const landingContentNames = [t('item.content.home', lang), t('item.content.ratio', lang)];
+    // Extract landing page items from content (homepage content only — content ratio removed)
+    const landingContentNames = [t('item.content.home', lang)];
     const landingContentItems = contentItems.filter(i => landingContentNames.includes(i.name));
     const siteContentItems = contentItems.filter(i => !landingContentNames.includes(i.name));
     allCategories.push({ name: t('group.content_quality', lang), items: siteContentItems, group: 'soft' });

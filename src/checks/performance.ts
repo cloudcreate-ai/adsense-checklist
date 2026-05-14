@@ -23,7 +23,7 @@ export async function checkPerformance(page: Page, url: string, browser: Browser
   try {
     hasViewport = await page.evaluate(() => !!document.querySelector('meta[name="viewport"]'));
   } catch { /* page may have navigated */ }
-  items.push({ name: 'Viewport', status: hasViewport ? 'pass' : 'warn', message: t(hasViewport ? 'perf.viewport.pass' : 'perf.viewport.warn', lang) });
+  items.push({ name: t('item.perf.viewport', lang), status: hasViewport ? 'pass' : 'warn', message: t(hasViewport ? 'perf.viewport.pass' : 'perf.viewport.warn', lang) });
 
   // Mobile test (overflow, small font, heading hierarchy, navigation, touch targets)
   try {
