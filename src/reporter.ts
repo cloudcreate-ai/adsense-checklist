@@ -92,16 +92,26 @@ export function renderTerminalReport(report: CheckReport): string {
   // Review verdict
   const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
   const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
-  lines.push(chalk.bold(`  ${t('report.verdict_title', lang)}`));
+
+  // When AI assessment is available, use the lowest probability to inform verdict
+  const aiProb = report.expertSummary?.probability ?? report.fastSummary?.probability ?? null;
+  const aiLow = aiProb !== null && aiProb < 70;
+
+  let verdict: string;
   if (report.hardStatus === 'fail') {
-    lines.push(chalk.red.bold(`  NOT READY — ${hardFailCount} ${t('report.verdict_fail_suffix', lang)}`));
+    verdict = chalk.red.bold(`  NOT READY — ${hardFailCount} ${t('report.verdict_fail_suffix', lang)}`);
   } else if (report.hardStatus === 'warn') {
-    lines.push(chalk.yellow.bold(`  NEEDS FIXES — ${hardWarnCount} ${t('report.verdict_warn_suffix', lang)}`));
+    verdict = chalk.yellow.bold(`  NEEDS FIXES — ${hardWarnCount} ${t('report.verdict_warn_suffix', lang)}`);
+  } else if (aiLow) {
+    // Hard checks pass but AI flags content quality issues
+    verdict = chalk.yellow.bold(`  NEEDS FIXES — ${t('report.verdict.ai_quality', lang)}`);
   } else if (report.warned > 0) {
-    lines.push(chalk.yellow.bold(`  MOSTLY READY — ${t('report.mostly', lang, { count: report.warned }).replace(/^MOSTLY READY — /, '')}`));
+    verdict = chalk.yellow.bold(`  MOSTLY READY — ${t('report.mostly', lang, { count: report.warned }).replace(/^MOSTLY READY — /, '')}`);
   } else {
-    lines.push(chalk.green.bold(`  ${t('report.ready', lang)}`));
+    verdict = chalk.green.bold(`  ${t('report.ready', lang)}`);
   }
+  lines.push(chalk.bold(`  ${t('report.verdict_title', lang)}`));
+  lines.push(verdict);
   lines.push('');
 
   // ── Approval Probability ──

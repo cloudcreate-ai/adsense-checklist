@@ -168,6 +168,7 @@ const en: Record<string, string> = {
   'report.verdict_title': 'Review Verdict',
   'report.verdict_fail_suffix': 'failure(s) must be fixed',
   'report.verdict_warn_suffix': 'warning(s) to address',
+  'report.verdict.ai_quality': 'content quality needs improvement (see AI assessment below)',
   'report.warning_ratio': 'Warning ratio: {count}/{total} ({pct}%)',
   'report.warning_penalty': 'Score penalty: -{points}',
 
@@ -469,6 +470,7 @@ const zh: Record<string, string> = {
   'report.verdict_title': '审核结论',
   'report.verdict_fail_suffix': '项失败必须修复',
   'report.verdict_warn_suffix': '项警告待修复',
+  'report.verdict.ai_quality': '内容质量需提升（详见下方 AI 评估）',
   'report.warning_ratio': '警告比例: {count}/{total} ({pct}%)',
   'report.warning_penalty': '扣分: -{points}',
 
