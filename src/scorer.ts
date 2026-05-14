@@ -194,6 +194,8 @@ export interface CompositeResult {
   siteQuality: number;
   /** Landing page quality score */
   homeQuality: number;
+  /** True if pageValueScore was estimated from structural quality (no AI) */
+  pageValueEstimated: boolean;
 }
 
 /**
@@ -250,8 +252,6 @@ export function computeCompositeScore(
   const hardFail = hardItems.filter(i => i.status === 'fail').length;
   const hardWarn = hardItems.filter(i => i.status === 'warn').length;
   const hardTotal = hardItems.length;
-  const hardPass = hardItems.filter(i => i.status === 'pass').length;
-  const hardPassRate = hardTotal > 0 ? (hardPass / hardTotal) * 100 : 100;
 
   let hardStatus: 'ready' | 'warn' | 'fail' = 'ready';
   if (hardFail > 0) hardStatus = 'fail';
@@ -274,9 +274,14 @@ export function computeCompositeScore(
     : 100;
 
   // 4. Page value (VOT: value × originality × translation)
+  // Without AI: estimate from structural quality signals (siteQuality + homeQuality)
   let votScore = 0;
+  let votEstimated = false;
   if (aiAnalyses && aiAnalyses.length > 0) {
     votScore = computeSiteVot(aiAnalyses, pageScores);
+  } else {
+    votScore = Math.round((siteQuality + homeQuality) / 2);
+    votEstimated = true;
   }
 
   // Legacy siteAiScore for display (5-dim geo mean, all pages weighted)
@@ -302,15 +307,11 @@ export function computeCompositeScore(
   // 6. Composite: value × site_coef × home_coef, capped by thresholds
   const siteCoef = siteQuality / 100;
   const homeCoef = homeQuality / 100;
-  const base = votScore > 0
-    ? votScore * siteCoef * homeCoef
-    : Math.round(Math.sqrt(hardPassRate * (softCategories.length > 0 ? softCategories.reduce((s, c) => s + categoryPassRate(c), 0) / softCategories.length : 100)));
+  const base = votScore * siteCoef * homeCoef;
   const compositeScore = Math.min(100, Math.max(0, Math.round(Math.min(base, cap))));
 
   // Legacy softScore for display compatibility
-  const softScore = votScore > 0
-    ? Math.round(votScore * 0.6 + (siteQuality + homeQuality) / 2 * 0.4)
-    : Math.round(softCategories.reduce((s, c) => s + categoryPassRate(c), 0) / Math.max(1, softCategories.length));
+  const softScore = Math.round(votScore * 0.6 + (siteQuality + homeQuality) / 2 * 0.4);
 
   // 7. Warning penalty
   const allItems = [...hardItems, ...softCategories.flatMap(c => c.items)];
@@ -325,5 +326,5 @@ export function computeCompositeScore(
     categoryScores.push(scoreCategory(cat));
   }
 
-  return { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore, pageValueScore: votScore, siteQuality, homeQuality };
+  return { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore, pageValueScore: votScore, pageValueEstimated: votEstimated, siteQuality, homeQuality };
 }

@@ -245,13 +245,9 @@ export function renderTerminalReport(report: CheckReport): string {
   lines.push(`  │  ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
   lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
   lines.push(chalk.gray(`  │`));
-  // Show formula based on whether AI analysis was done
-  const hasAiValue = (report.pageValueScore ?? 0) > 0;
-  if (hasAiValue) {
-    lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
-  } else {
-    lines.push(chalk.gray(`  │  ${t('reporter.formula_fallback', lang, { hardPct: Math.round(report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'pass').length / Math.max(1, report.hardCategories.flatMap(c => c.items).length) * 100), softPct: report.softScore, total: report.compositeScore })}`));
-    lines.push(chalk.gray(`  │  (${t('reporter.formula_fallback_note', lang)})`));
+  lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
+  if (report.pageValueEstimated) {
+    lines.push(chalk.yellow(`  │  ⚠ ${t('reporter.value_estimated_note', lang)}`));
   }
   if (report.warningPenalty > 0) {
     lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
@@ -335,31 +331,36 @@ export function renderTerminalReport(report: CheckReport): string {
   }
 
   // ============================================================
-  // 7. PAGE VALUE BREAKDOWN — AI dimensions
+  // 7. PAGE VALUE BREAKDOWN — AI dimensions or estimated
   // ============================================================
-  if (report.aiDimensionAverages || report.aiDimensionStats) {
+  if (report.aiDimensionAverages || report.aiDimensionStats || report.pageValueEstimated) {
     lines.push(chalk.bold(`  ${t('report.section.value', lang)} (${votColor(Math.round(report.pageValueScore ?? 0) + '/100')})`));
     lines.push('');
 
-    if (report.aiDimensionStats) {
-      const s = report.aiDimensionStats as Record<string, { avg: number; min: number; lowCount: number; lowPct: number }>;
-      const totalPages = report.pages.length;
-      const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
-      for (const [key, dim] of Object.entries(s)) {
-        const c = dim.min < 4 ? chalk.red : dim.min < 6 ? chalk.yellow : chalk.green;
-        const lowText = dim.lowCount > 0 ? chalk.red(` (${dim.lowCount}/${totalPages} pages <6)`) : '';
-        lines.push(`    ${dimColor(dim.avg)(`${t(`reporter.dim_${key}`, lang)}: ${dim.avg}/10`)} ${c(`min: ${dim.min}`)}` + lowText);
+    if (report.pageValueEstimated) {
+      lines.push(chalk.yellow(`    ⚠ ${t('reporter.value_estimated_detail', lang)}`));
+      lines.push(chalk.gray(`    ${t('reporter.value_estimated_hint', lang)}`));
+    } else {
+      if (report.aiDimensionStats) {
+        const s = report.aiDimensionStats as Record<string, { avg: number; min: number; lowCount: number; lowPct: number }>;
+        const totalPages = report.pages.length;
+        const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
+        for (const [key, dim] of Object.entries(s)) {
+          const c = dim.min < 4 ? chalk.red : dim.min < 6 ? chalk.yellow : chalk.green;
+          const lowText = dim.lowCount > 0 ? chalk.red(` (${dim.lowCount}/${totalPages} pages <6)`) : '';
+          lines.push(`    ${dimColor(dim.avg)(`${t(`reporter.dim_${key}`, lang)}: ${dim.avg}/10`)} ${c(`min: ${dim.min}`)}` + lowText);
+        }
+      } else if (report.aiDimensionAverages) {
+        const d = report.aiDimensionAverages as Record<string, number>;
+        const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
+        for (const [key, val] of Object.entries(d)) {
+          lines.push(`    ${dimColor(val)(`${t(`reporter.dim_${key}`, lang)}: ${val}/10`)}`);
+        }
       }
-    } else if (report.aiDimensionAverages) {
-      const d = report.aiDimensionAverages as Record<string, number>;
-      const dimColor = (v: number) => v >= 8 ? chalk.green : v >= 5 ? chalk.yellow : chalk.red;
-      for (const [key, val] of Object.entries(d)) {
-        lines.push(`    ${dimColor(val)(`${t(`reporter.dim_${key}`, lang)}: ${val}/10`)}`);
-      }
-    }
 
-    if (report.siteAiScore > 0) {
-      lines.push(chalk.gray(`    ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
+      if (report.siteAiScore > 0) {
+        lines.push(chalk.gray(`    ${t('reporter.ai_value_label', lang)}: ${report.siteAiScore}/100 (${t('reporter.ai_value_note', lang)})`));
+      }
     }
     lines.push('');
   }
@@ -596,6 +597,10 @@ export function renderMarkdownReport(report: CheckReport): string {
   lines.push(`| **${t('report.composite_score', lang)}** | **${report.compositeScore}/100** |`);
   lines.push('');
   lines.push(`> ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`);
+  if (report.pageValueEstimated) {
+    lines.push('');
+    lines.push(`> ⚠ ${t('reporter.value_estimated_note', lang)}`);
+  }
   lines.push('');
 
   // Hard requirements
@@ -675,44 +680,50 @@ export function renderMarkdownReport(report: CheckReport): string {
   // ============================================================
   // 7. PAGE VALUE BREAKDOWN
   // ============================================================
-  if (report.aiDimensionStats || report.aiDimensionAverages) {
+  if (report.aiDimensionStats || report.aiDimensionAverages || report.pageValueEstimated) {
     lines.push(`## ${t('md.section.value', lang)} (${Math.round(report.pageValueScore ?? 0)}/100)`);
     lines.push('');
 
-    if (report.aiDimensionStats) {
-      const s = report.aiDimensionStats as Record<string, { avg: number; min: number; lowCount: number; lowPct: number }>;
-      const totalPages = report.pages.length;
-      const dimNames: Record<string, string> = {
-        value: t('md.dim_value', lang),
-        originality: t('md.dim_originality', lang),
-        relevance: t('md.dim_relevance', lang),
-        compliance: t('md.dim_compliance', lang),
-        translation: t('md.dim_translation', lang),
-      };
-      lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} | ${t('md.table.min_score', lang)} | ${t('md.table.low_count', lang)} |`);
-      lines.push(`|------|------|------|------|`);
-      for (const [key, dim] of Object.entries(s)) {
-        lines.push(`| ${dimNames[key] ?? key} | ${dim.avg}/10 | ${dim.min}/10 | ${dim.lowCount}/${totalPages} (${dim.lowPct}%) |`);
-      }
-    } else if (report.aiDimensionAverages) {
-      const d = report.aiDimensionAverages as Record<string, number>;
-      const dimNames: Record<string, string> = {
-        value: t('md.dim_value', lang),
-        originality: t('md.dim_originality', lang),
-        relevance: t('md.dim_relevance', lang),
-        compliance: t('md.dim_compliance', lang),
-        translation: t('md.dim_translation', lang),
-      };
-      lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} |`);
-      lines.push(`|------|------|`);
-      for (const [key, val] of Object.entries(d)) {
-        lines.push(`| ${dimNames[key] ?? key} | ${val}/10 |`);
-      }
-    }
-
-    if (report.siteAiScore > 0) {
+    if (report.pageValueEstimated) {
+      lines.push(`⚠ ${t('reporter.value_estimated_detail', lang)}`);
       lines.push('');
-      lines.push(`**${t('md.site_ai_score', lang)}**: ${report.siteAiScore}/100`);
+      lines.push(t('reporter.value_estimated_hint', lang));
+    } else {
+      if (report.aiDimensionStats) {
+        const s = report.aiDimensionStats as Record<string, { avg: number; min: number; lowCount: number; lowPct: number }>;
+        const totalPages = report.pages.length;
+        const dimNames: Record<string, string> = {
+          value: t('md.dim_value', lang),
+          originality: t('md.dim_originality', lang),
+          relevance: t('md.dim_relevance', lang),
+          compliance: t('md.dim_compliance', lang),
+          translation: t('md.dim_translation', lang),
+        };
+        lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} | ${t('md.table.min_score', lang)} | ${t('md.table.low_count', lang)} |`);
+        lines.push(`|------|------|------|------|`);
+        for (const [key, dim] of Object.entries(s)) {
+          lines.push(`| ${dimNames[key] ?? key} | ${dim.avg}/10 | ${dim.min}/10 | ${dim.lowCount}/${totalPages} (${dim.lowPct}%) |`);
+        }
+      } else if (report.aiDimensionAverages) {
+        const d = report.aiDimensionAverages as Record<string, number>;
+        const dimNames: Record<string, string> = {
+          value: t('md.dim_value', lang),
+          originality: t('md.dim_originality', lang),
+          relevance: t('md.dim_relevance', lang),
+          compliance: t('md.dim_compliance', lang),
+          translation: t('md.dim_translation', lang),
+        };
+        lines.push(`| ${t('md.table.dimension', lang)} | ${t('md.table.avg_score', lang)} |`);
+        lines.push(`|------|------|`);
+        for (const [key, val] of Object.entries(d)) {
+          lines.push(`| ${dimNames[key] ?? key} | ${val}/10 |`);
+        }
+      }
+
+      if (report.siteAiScore > 0) {
+        lines.push('');
+        lines.push(`**${t('md.site_ai_score', lang)}**: ${report.siteAiScore}/100`);
+      }
     }
     lines.push('');
   }

@@ -554,7 +554,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Compute composite score with AI value scoring
     const pageScoresForComposite = pageDetails.map(p => ({ pageType: p.pageType, score: p.score }));
-    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore, pageValueScore, siteQuality, homeQuality } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses, contentDuplicationScore);
+    const { compositeScore, categoryScores, hardStatus, softScore, warningRatio, warningPenalty, siteAiScore, pageValueScore, pageValueEstimated, siteQuality, homeQuality } = computeCompositeScore(pageScoresForComposite, hardCategories, softCategories, pageAnalyses, contentDuplicationScore);
 
     // Per-dimension averages and stats (generic, iterates over all dimensions)
     const DIMENSION_KEYS: Array<{ key: 'valueScore' | 'originalityScore' | 'relevanceScore' | 'complianceScore' | 'translationScore'; name: string }> = [
@@ -594,7 +594,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       skipped: allItems.filter(i => i.status === 'skip').length,
       pages: pageDetails,
       compositeScore, categoryScores, hardStatus, softScore,
-      warningRatio, warningPenalty, siteAiScore, pageValueScore, siteQuality, homeQuality, aiDimensionAverages, aiDimensionStats,
+      warningRatio, warningPenalty, siteAiScore, pageValueScore, pageValueEstimated, siteQuality, homeQuality, aiDimensionAverages, aiDimensionStats,
     };
     const approvalEstimate = estimateByRules(partialReport, lang);
 

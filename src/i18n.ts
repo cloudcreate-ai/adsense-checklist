@@ -220,8 +220,9 @@ const en: Record<string, string> = {
 
   // Composite formula
   'reporter.formula_new': '{value} × {site}/100 × {home}/100 = {total}',
-  'reporter.formula_fallback': '√(硬性 {hardPct}% × 智能 {softPct}%) = {total}',
-  'reporter.formula_fallback_note': 'AI analysis not enabled, using fallback formula',
+  'reporter.value_estimated_note': 'Estimated from structural quality — use --ai for real content value assessment',
+  'reporter.value_estimated_detail': 'Page value estimated from site-wide and landing page quality (structural signals only)',
+  'reporter.value_estimated_hint': 'Actual value, originality, and translation quality need AI analysis (use --ai flag)',
 
   // Group labels
   'group.required_pages': 'Required Pages',
@@ -624,8 +625,9 @@ const zh: Record<string, string> = {
   'md.approval_expert': '深度评估',
   'md.table.metric': '指标',
 
-  'reporter.formula_fallback': '√(硬性 {hardPct}% × 智能 {softPct}%) = {total}',
-  'reporter.formula_fallback_note': '未启用 AI 分析，使用备用公式',
+  'reporter.value_estimated_note': '页面价值由结构质量推算 — 使用 --ai 获取真实内容价值评估',
+  'reporter.value_estimated_detail': '页面价值由全站质量和首页质量推算（仅反映结构信号）',
+  'reporter.value_estimated_hint': '真实的内容价值、原创性和翻译质量需要 AI 分析（使用 --ai 参数）',
 
   'reporter.mechanical_label': '基础评分',
   'reporter.advanced_label': '高级评分',

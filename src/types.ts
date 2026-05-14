@@ -90,6 +90,7 @@ export interface CheckReport {
   warningPenalty: number;          // points deducted
   siteAiScore: number;             // 0-100 AI value score (5-dim geometric mean, all pages weighted)
   pageValueScore: number;          // 0-100 VOT score (value × originality × translation, excluding required/utility)
+  pageValueEstimated: boolean;     // true if estimated from structural quality (no AI)
   siteQuality: number;             // 0-100 site-wide quality (hard + content + UX)
   homeQuality: number;             // 0-100 landing page quality
   aiDimensionAverages?: Record<string, number>; // per-dimension averages across all analyzed pages (0-10)
