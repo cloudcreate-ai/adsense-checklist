@@ -87,30 +87,36 @@ export function classifyPage(url: string): PageType {
     const rest = normalizedPath.slice(3); // skip /xx
     if (!rest) return 'listing'; // /ja/, /hi/
 
+    const restWithSlash = rest.endsWith('/') ? rest : rest + '/';
+
     for (const prefix of CONTENT_PREFIXES) {
-      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
-        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+      const p = prefix.replace(/\/$/, '/');
+      if (restWithSlash.startsWith(p)) {
+        const suffix = restWithSlash.slice(p.length);
         if (suffix.length > 1) return 'content';
         return 'listing';
       }
     }
     for (const prefix of GAME_PREFIXES) {
-      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
-        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+      const p = prefix.replace(/\/$/, '/');
+      if (restWithSlash.startsWith(p)) {
+        const suffix = restWithSlash.slice(p.length);
         if (suffix.length > 1) return 'game_detail';
         return 'listing';
       }
     }
     for (const prefix of VIDEO_PREFIXES) {
-      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
-        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+      const p = prefix.replace(/\/$/, '/');
+      if (restWithSlash.startsWith(p)) {
+        const suffix = restWithSlash.slice(p.length);
         if (suffix.length > 1) return 'video_detail';
         return 'listing';
       }
     }
     for (const prefix of REFERENCE_PREFIXES) {
-      if (rest.startsWith(prefix.replace(/\/$/, '/'))) {
-        const suffix = rest.slice(prefix.replace(/\/$/, '').length);
+      const p = prefix.replace(/\/$/, '/');
+      if (restWithSlash.startsWith(p)) {
+        const suffix = restWithSlash.slice(p.length);
         if (suffix.length > 1) return 'reference_detail';
         return 'reference_listing';
       }
