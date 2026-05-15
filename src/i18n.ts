@@ -368,6 +368,13 @@ const en: Record<string, string> = {
   'md.summary.needs_fixes': '**⚠️ NEEDS FIXES** — {count} warning(s) to address',
   'md.summary.mostly_ready': '**⚠️ MOSTLY READY** — fix {count} warning(s) before submitting',
   'md.summary.ready': '**✅ READY** — can submit for AdSense review',
+
+  // Info subcommands
+  'info.site_title': 'AdSense Site Basic Check',
+  'info.home_title': 'AdSense Homepage Quality Check',
+  'info.site_subtitle': 'Hard requirements only — run full check for content quality assessment',
+  'info.home_subtitle': 'Homepage quality only — run full check for site-wide requirements',
+  'info.no_composite': 'Composite score not available (requires full check with content pages)',
 };
 
 // ─── 中文消息 ───────────────────────────────────────────────────────
@@ -740,6 +747,13 @@ const zh: Record<string, string> = {
   'md.summary.needs_fixes': '**⚠️ NEEDS FIXES** — {count} 项警告待修复',
   'md.summary.mostly_ready': '**⚠️ MOSTLY READY** — 修复 {count} 项警告后可提交审核',
   'md.summary.ready': '**✅ READY** — 可以提交 AdSense 审核',
+
+  // Info subcommands
+  'info.site_title': 'AdSense 站点基础检查',
+  'info.home_title': 'AdSense 首页质量检查',
+  'info.site_subtitle': '仅检查硬性要求 — 使用完整检查获取内容质量评估',
+  'info.home_subtitle': '仅检查首页质量 — 使用完整检查获取全站要求',
+  'info.no_composite': '综合评分不可用（需要爬取内容页的完整检查）',
 };
 
 // ─── Language registry ──────────────────────────────────────────────

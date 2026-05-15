@@ -1,6 +1,6 @@
 import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic, PageType } from './types.js';
 import { t } from './i18n.js';
-import { BrowserManager, fetchPage, fetchSitemapUrls, isContentUrl } from './browser.js';
+import { BrowserManager, fetchPage, fetchSitemapUrls, getSitemapFromRobots, isContentUrl } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
 import { checkSiteStructure } from './checks/structure.js';
@@ -674,4 +674,245 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
   } finally {
     await browser.close();
   }
+}
+
+/**
+ * Site-wide basic info check: hard requirements only.
+ * Fetches homepage for links/nav/footer, then runs required pages, site structure, and policy checks.
+ * No content page crawl, no AI, no performance/DOM measurements.
+ */
+export async function checkSiteBasic(
+  url: string,
+  timeout: number,
+  lang: Lang
+): Promise<CheckReport> {
+  const origin = new URL(url).origin;
+  const browser = new BrowserManager();
+  const timing = new TimingTracker();
+
+  try {
+    timing.start('launch');
+    await browser.launch();
+    timing.end();
+
+    timing.start('homepage');
+    const pg = await browser.newPage();
+    const homeData = await fetchPage(pg, url, timeout);
+    await pg.close();
+    timing.end();
+
+    // Sitemap URLs for required pages check
+    const robotsSitemaps = await getSitemapFromRobots(origin);
+    let sitemapUrls: string[] = [];
+    try {
+      const resp = await fetch(`${origin}/sitemap.xml`);
+      if (resp.ok) {
+        const text = await resp.text();
+        const locs = text.match(/<loc>([^<]+)<\/loc>/g) || [];
+        sitemapUrls = locs.map(l => l.replace(/<\/?loc>/g, ''));
+      }
+    } catch {}
+    if (robotsSitemaps.length > 0 && sitemapUrls.length === 0) {
+      for (const rs of robotsSitemaps) {
+        try {
+          const resp = await fetch(rs);
+          if (resp.ok) {
+            const text = await resp.text();
+            const locs = text.match(/<loc>([^<]+)<\/loc>/g) || [];
+            sitemapUrls.push(...locs.map(l => l.replace(/<\/?loc>/g, '')));
+          }
+        } catch {}
+      }
+    }
+
+    // Required pages
+    const pagesCat = await checkRequiredPages({ allLinks: homeData.linkDetails, navText: homeData.navText, footerText: homeData.footerText, sitemapUrls }, lang);
+
+    // Site structure (excluding H1 + internal links — those belong to homepage quality)
+    const structCat = await checkSiteStructure(origin, homeData.links, 0, [], lang);
+    const landingStructNames = ['H1', t('item.structure.internal', lang)];
+    const siteStructItems = structCat.items.filter(i => !landingStructNames.includes(i.name));
+
+    // Policy (homepage text only)
+    const policyCat = checkPolicyCompliance([{ url: homeData.url, text: homeData.text }], lang);
+
+    // Site type detection (DOM signals only, no AI)
+    const domResult = detectSiteType([homeData.signals], homeData.navText + ' ' + homeData.footerText, undefined);
+    const siteType = domResult.type;
+    const siteTypeConfidence = domResult.confidence;
+
+    // Estimate site page count from sitemap + homepage links
+    const allInternal = [...new Set([...homeData.links.filter(l => { try { return new URL(l).origin === origin; } catch { return false; } }), ...sitemapUrls.filter(u => { try { return new URL(u).origin === origin; } catch { return false; } })])];
+    const estimatedPageCount = allInternal.length;
+
+    // Content quality: only site scale check
+    const contentResult = checkContentQuality([], estimatedPageCount, lang, siteType, []);
+    const scaleItem = contentResult.category.items.find(i => i.name === t('item.content.scale', lang));
+
+    // Build categories
+    const allCategories: CheckCategory[] = [];
+    if (scaleItem) {
+      allCategories.push({ name: t('group.site_scale', lang), items: [scaleItem], group: 'hard' });
+    }
+    allCategories.push({ ...pagesCat, group: 'hard' });
+    allCategories.push({ name: t('group.site_structure', lang), items: siteStructItems, group: 'hard' });
+    allCategories.push({ ...policyCat, group: 'hard' });
+
+    const hardCategories = allCategories.filter(c => c.group === 'hard');
+    const softCategories: CheckCategory[] = [];
+    const allItems = allCategories.flatMap(c => c.items);
+    const hardItems = hardCategories.flatMap(c => c.items);
+
+    timing.print();
+
+    return {
+      url,
+      timestamp: new Date().toISOString(),
+      lang,
+      siteType,
+      siteTypeConfidence,
+      samplingInfo: { pagesAnalyzed: 1, aiAnalyzed: 0, totalDiscovered: allInternal.length, confidence: 'low' },
+      categories: allCategories,
+      hardCategories,
+      softCategories,
+      score: allItems.filter(i => i.status === 'pass').length,
+      totalChecks: allItems.length,
+      passed: allItems.filter(i => i.status === 'pass').length,
+      warned: allItems.filter(i => i.status === 'warn').length,
+      failed: allItems.filter(i => i.status === 'fail').length,
+      skipped: allItems.filter(i => i.status === 'skip').length,
+      pages: [],
+      compositeScore: 0,
+      categoryScores: allCategories.map(c => ({ name: c.name, score: categoryScoreValue(c), maxScore: c.items.length * 100 })),
+      hardStatus: hardItems.some(i => i.status === 'fail') ? 'fail' : hardItems.some(i => i.status === 'warn') ? 'warn' : 'ready',
+      softScore: 0,
+      warningRatio: 0,
+      warningPenalty: 0,
+      siteAiScore: 0,
+      pageValueScore: 0,
+      pageValueEstimated: true,
+      siteQuality: hardItems.length > 0 ? Math.round(hardItems.filter(i => i.status === 'pass').length / hardItems.length * 100) : 100,
+      homeQuality: 0,
+    };
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Homepage quality check: H1, internal links, load speed, viewport, overflow, font, heading, nav, touch, popup.
+ * Needs Playwright for DOM measurements and performance timing.
+ */
+export async function checkHomeQuality(
+  url: string,
+  timeout: number,
+  lang: Lang
+): Promise<CheckReport> {
+  const browser = new BrowserManager();
+  const timing = new TimingTracker();
+
+  try {
+    timing.start('launch');
+    await browser.launch();
+    timing.end();
+
+    timing.start('homepage');
+    const pg = await browser.newPage();
+    const homeData = await fetchPage(pg, url, timeout);
+    timing.end();
+
+    timing.start('h1');
+    const h1Count = await pg.evaluate(() => document.querySelectorAll('h1').length);
+    timing.end();
+
+    // Performance checks (needs live page + browser for mobile context)
+    const perfCat = await checkPerformance(pg, url, await browser.launch(), lang);
+    await pg.close();
+
+    // Landing page items: speed, viewport, overflow + H1 + internal links
+    const landingPerfNames = [t('item.perf.speed', lang), 'Viewport', t('item.perf.overflow', lang)];
+    const landingPerfItems = perfCat.items.filter(i => landingPerfNames.includes(i.name));
+    const uxItems = perfCat.items.filter(i => !landingPerfNames.includes(i.name));
+
+    // Structure items for landing page: H1 + internal links
+    const structCat = await checkSiteStructure(url.replace(/\/+$/, '').split('/').slice(0, 3).join('/'), homeData.links, h1Count, [], lang);
+    const landingStructNames = ['H1', t('item.structure.internal', lang)];
+    const landingStructItems = structCat.items.filter(i => landingStructNames.includes(i.name));
+
+    // Site type detection
+    const domResult = detectSiteType([homeData.signals], homeData.navText + ' ' + homeData.footerText, undefined);
+    const siteType = domResult.type;
+    const siteTypeConfidence = domResult.confidence;
+
+    // Homepage page detail
+    const homePageDetail = buildPageDetails(
+      [{ url: homeData.url, text: homeData.text, title: homeData.title, lang: homeData.pageInfo?.lang ?? 'en' }],
+      [],
+      siteType,
+      lang,
+      [homeData.signals]
+    );
+
+    // Build categories
+    const allCategories: CheckCategory[] = [];
+
+    // Landing page (soft)
+    const landingItems: CheckItem[] = [...landingStructItems, ...landingPerfItems];
+    if (landingItems.length > 0) {
+      allCategories.push({ name: t('group.landing_page', lang), items: landingItems, group: 'soft' });
+    }
+
+    // UX (soft)
+    if (uxItems.length > 0) {
+      allCategories.push({ name: t('group.user_experience', lang), items: uxItems, group: 'soft' });
+    }
+
+    const hardCategories: CheckCategory[] = [];
+    const softCategories = allCategories.filter(c => c.group === 'soft');
+    const allItems = allCategories.flatMap(c => c.items);
+    const softLanding = softCategories.find(c => c.name === t('group.landing_page', lang));
+
+    const homeQuality = softLanding && softLanding.items.length > 0
+      ? Math.round(softLanding.items.filter(i => i.status === 'pass').length / softLanding.items.length * 100)
+      : 100;
+
+    timing.print();
+
+    return {
+      url,
+      timestamp: new Date().toISOString(),
+      lang,
+      siteType,
+      siteTypeConfidence,
+      samplingInfo: { pagesAnalyzed: 1, aiAnalyzed: 0, totalDiscovered: 0, confidence: 'low' },
+      categories: allCategories,
+      hardCategories,
+      softCategories,
+      score: allItems.filter(i => i.status === 'pass').length,
+      totalChecks: allItems.length,
+      passed: allItems.filter(i => i.status === 'pass').length,
+      warned: allItems.filter(i => i.status === 'warn').length,
+      failed: allItems.filter(i => i.status === 'fail').length,
+      skipped: allItems.filter(i => i.status === 'skip').length,
+      pages: homePageDetail,
+      compositeScore: 0,
+      categoryScores: allCategories.map(c => ({ name: c.name, score: categoryScoreValue(c), maxScore: c.items.length * 100 })),
+      hardStatus: 'ready',
+      softScore: 0,
+      warningRatio: 0,
+      warningPenalty: 0,
+      siteAiScore: 0,
+      pageValueScore: 0,
+      pageValueEstimated: true,
+      siteQuality: 0,
+      homeQuality,
+    };
+  } finally {
+    await browser.close();
+  }
+}
+
+function categoryScoreValue(cat: CheckCategory): number {
+  if (cat.items.length === 0) return 100;
+  return cat.items.reduce((s, i) => s + (i.status === 'pass' ? 100 : i.status === 'warn' ? 40 : 0), 0);
 }

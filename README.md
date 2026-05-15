@@ -14,11 +14,58 @@ Or run directly without installing:
 npx @cloudcreate/adsense-check https://example.com
 ```
 
-## AI Configuration
+## Update
 
-Many features (topic detection, 5-dimension scoring, approval estimation) require an AI API key. Supports any OpenAI-compatible API (DeepSeek, OpenAI, Moonshot, local LLM, etc.).
+Check your current version:
 
-**Option 1: Environment file**
+```bash
+adsense-check --version
+```
+
+Update to the latest version:
+
+```bash
+npm update -g @cloudcreate/adsense-check
+```
+
+Or with npx, always use the latest version:
+
+```bash
+npx @cloudcreate/adsense-check@latest https://example.com
+```
+
+## Configuration
+
+**Option 1: Config file**
+
+Run `npx adsense-check init` to generate `.adsense-check.yaml` with built-in defaults. CLI flags override config values.
+
+```yaml
+# .adsense-check.yaml
+maxCrawl: 50
+maxPages: 50
+maxContent: 20
+sampleMin: 20
+sampleRatio: 0.2
+concurrency: 5
+timeout: 30000
+lang: "en"
+output: ~/.adsense-check/reports
+ai: true
+expert: false
+fastModel:
+  apiKey: ""
+  apiBase: ""
+  model: ""
+expertModel:
+  apiKey: ""
+  apiBase: ""
+  model: ""
+```
+
+For global defaults, use `--global`: `npx adsense-check init --global` (writes to `~/.adsense-check/config.yaml`).
+
+**Option 2: Environment file (AI only)**
 
 ```bash
 cp .env.example .env
@@ -28,11 +75,13 @@ cp .env.example .env
 #   AI_MODEL=deepseek-chat
 ```
 
-**Option 2: Command-line flag**
+**Option 3: Command-line flag**
 
 ```bash
 adsense-check https://example.com --ai --api-key sk-xxx...
 ```
+
+Priority: CLI flags > `.adsense-check.yaml` > `~/.adsense-check.yaml` > built-in defaults.
 
 # Quick Start
 
@@ -97,7 +146,37 @@ adsense-check topic https://example.com --type game
 adsense-check topic https://example.com --json
 ```
 
-Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
+Reports are auto-saved to `~/.adsense-check/reports/<domain>-<timestamp>.json` and `~/.adsense-check/reports/<domain>-<timestamp>.md`.
+
+### Site Subcommand
+
+Quick check of site-wide hard requirements — no content page crawl, no AI. Completes in ~10 seconds.
+
+```bash
+# Check hard requirements (required pages, robots.txt, sitemap, ads.txt, policy keywords)
+adsense-check site https://example.com
+
+# JSON output
+adsense-check site https://example.com --json
+
+# Chinese output
+adsense-check site https://example.com -l zh
+```
+
+### Home Subcommand
+
+Quick check of homepage quality — H1, internal links, load speed, viewport, mobile UX. Requires Playwright for DOM measurements.
+
+```bash
+# Check homepage quality
+adsense-check home https://example.com
+
+# JSON output
+adsense-check home https://example.com --json
+
+# Chinese output
+adsense-check home https://example.com -l zh
+```
 
 ## Features
 
@@ -201,25 +280,27 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 
 ## Options
 
+Defaults come from `.adsense-check.yaml` or `~/.adsense-check.yaml`. CLI flags override config values.
+
 ```
 -v, --version             Show version
 -j, --json                Output JSON to stdout
--n, --max-crawl <n>       Total page crawl limit (default: 50)
--m, --page-limit <n>      Max structural pages for sampling pool (default: 50)
--c, --content-limit <n>   Max content pages to crawl (default: 20)
---sample-min <n>          Min content pages to sample (default: 20)
---sample-ratio <ratio>    Content page sampling ratio 0-1 (default: 0.2)
---ai                      Enable AI content quality analysis (default: on)
+-n, --max-crawl <n>       Total page crawl limit
+-m, --page-limit <n>      Max structural pages for sampling pool
+-c, --content-limit <n>   Max content pages to crawl
+--sample-min <n>          Min content pages to sample
+--sample-ratio <ratio>    Content page sampling ratio 0-1
+--ai                      Enable AI content quality analysis
 --no-ai                   Disable AI content quality analysis
---expert                  Enable expert AI summary (default: auto when configured)
+--expert                  Enable expert AI summary
 --no-expert               Disable expert AI summary
--b, --concurrency <n>     AI batch concurrency (default: 5)
+-b, --concurrency <n>     AI batch concurrency
 --page <url>              Analyze single page value (5-dimension scoring)
--t, --timeout <ms>        Page load timeout (default: 30000)
+-t, --timeout <ms>        Page load timeout
 --api-key <key>           AI API key
--o, --output <dir>        Report output dir (default: tmp)
+-o, --output <dir>        Report output dir
 --no-save                 Skip auto-saving report
--l, --lang <lang>         Output language: en|zh (default: en)
+-l, --lang <lang>         Output language: en|zh
 --type <type>             Force site type: content|tool|game|video|reference
 --detect-only             Only detect site type/topic, skip full check
 ```
@@ -229,10 +310,37 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 ```
 topic [options] <url>           Detect site type and topic from homepage
   -j, --json                    Output JSON to stdout
-  -t, --timeout <ms>            Page load timeout (default: 30000)
+  -t, --timeout <ms>            Page load timeout
   --api-key <key>               AI API key
-  -l, --lang <lang>             Output language: en|zh (default: en)
+  -l, --lang <lang>             Output language: en|zh
   --type <type>                 Force site type, skip AI detection
+```
+
+### Site subcommand
+
+```
+site [options] <url>            Quick check: site-wide hard requirements
+  -j, --json                    Output JSON to stdout
+  -t, --timeout <ms>            Page load timeout
+  -o, --output <dir>            Report output dir
+  -l, --lang <lang>             Output language: en|zh
+```
+
+### Home subcommand
+
+```
+home [options] <url>            Quick check: homepage quality
+  -j, --json                    Output JSON to stdout
+  -t, --timeout <ms>            Page load timeout
+  -o, --output <dir>            Report output dir
+  -l, --lang <lang>             Output language: en|zh
+```
+
+### Init subcommand
+
+```
+init [options]                  Generate .adsense-check.yaml config file
+  --global                      Write to home directory (~/.adsense-check.yaml)
 ```
 
 ### Page subcommand
@@ -240,9 +348,9 @@ topic [options] <url>           Detect site type and topic from homepage
 ```
 page [options] <url>          Analyze a single page with AI five-dimension scoring
   -j, --json                  Output JSON to stdout
-  -t, --timeout <ms>          Page load timeout (default: 30000)
+  -t, --timeout <ms>          Page load timeout
   --api-key <key>             AI API key
-  -l, --lang <lang>           Output language: en|zh (default: en)
+  -l, --lang <lang>           Output language: en|zh
   -r, --relevance             Check relevance against site topic (auto-extracts origin)
   --site <url>                Override site URL for topic detection
 ```
@@ -251,8 +359,8 @@ page [options] <url>          Analyze a single page with AI five-dimension scori
 
 ```
 eval <report>             Evaluate approval probability from existing JSON report
-  --lang <lang>           Output language: en|zh (default: en)
-  --expert                Run expert model assessment (default: auto when configured)
+  --lang <lang>           Output language: en|zh
+  --expert                Run expert model assessment
   --no-expert             Disable expert model assessment
   --json                  Output JSON comparison
 ```

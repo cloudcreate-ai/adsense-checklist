@@ -3,9 +3,10 @@
 import 'dotenv/config';
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { check } from './checker.js';
+import { loadConfig, saveConfig, getConfigPath, getGlobalConfigPath, DEFAULTS, type AdsenseConfig } from './config.js';
+import { check, checkSiteBasic, checkHomeQuality } from './checker.js';
 import { renderTerminalReport, renderJsonReport, renderMarkdownReport } from './reporter.js';
 import { t, isValidLang, getSupportedLangs } from './i18n.js';
 import { BrowserManager, fetchPage } from './browser.js';
@@ -205,21 +206,21 @@ program
   .version('1.0.0')
   .argument('<url>', 'Website URL to check')
   .option('-j, --json', 'Output JSON to stdout')
-  .option('-n, --max-crawl <number>', 'Total page crawl limit', '50')
-  .option('-m, --page-limit <number>', 'Max structural pages to crawl', '50')
-  .option('-c, --content-limit <number>', 'Max content pages to crawl', '20')
-  .option('--sample-min <number>', 'Min content pages to sample', '20')
-  .option('--sample-ratio <ratio>', 'Content page sampling ratio (0-1)', '0.2')
-  .option('--ai', 'Enable AI content quality analysis (default: true)', true)
+  .option('-n, --max-crawl <number>', 'Total page crawl limit')
+  .option('-m, --page-limit <number>', 'Max structural pages to crawl')
+  .option('-c, --content-limit <number>', 'Max content pages to crawl')
+  .option('--sample-min <number>', 'Min content pages to sample')
+  .option('--sample-ratio <ratio>', 'Content page sampling ratio (0-1)')
+  .option('--ai', 'Enable AI content quality analysis')
   .option('--no-ai', 'Disable AI content quality analysis')
   .option('--expert', 'Enable expert model assessment (default: auto when configured)')
   .option('--no-expert', 'Disable expert model assessment')
-  .option('-b, --concurrency <number>', 'AI batch concurrency (pages per batch)', '5')
-  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('-b, --concurrency <number>', 'AI batch concurrency (pages per batch)')
+  .option('-t, --timeout <ms>', 'Page load timeout')
   .option('--api-key <key>', 'AI API key')
-  .option('-o, --output <dir>', 'Report output directory', 'tmp')
+  .option('-o, --output <dir>', 'Report output directory')
   .option('--no-save', 'Skip auto-saving report')
-  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
   .option('--type <type>', 'Force site type (content|tool|game|video|reference), skip auto-detection')
   .option('--detect-only', 'Only detect site type/topic, skip full check')
   .option('--page <url>', 'Analyze a single page value (AI four-dimension scoring)')
@@ -227,13 +228,36 @@ program
     try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
     if (!url.startsWith('http')) url = 'https://' + url;
 
-    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+    // Load config (global + project), then override with CLI flags
+    const cfg = loadConfig();
+
+    // Apply AI config from config file to process.env (lowest priority, .env overrides)
+    if (cfg.fastModel.apiKey && !process.env.AI_FAST_API_KEY && !process.env.AI_API_KEY) process.env.AI_API_KEY = cfg.fastModel.apiKey;
+    if (cfg.fastModel.apiBase && !process.env.AI_FAST_API_BASE && !process.env.AI_API_BASE) process.env.AI_API_BASE = cfg.fastModel.apiBase;
+    if (cfg.fastModel.model && !process.env.AI_FAST_MODEL && !process.env.AI_MODEL) process.env.AI_MODEL = cfg.fastModel.model;
+    if (cfg.expertModel.apiKey && !process.env.AI_EXPERT_API_KEY) process.env.AI_EXPERT_API_KEY = cfg.expertModel.apiKey;
+    if (cfg.expertModel.apiBase && !process.env.AI_EXPERT_API_BASE) process.env.AI_EXPERT_API_BASE = cfg.expertModel.apiBase;
+    if (cfg.expertModel.model && !process.env.AI_EXPERT_MODEL) process.env.AI_EXPERT_MODEL = cfg.expertModel.model;
+
+    // Resolve values: CLI flag > config > default
+    const lang: Lang = isValidLang(opts.lang !== undefined ? opts.lang : cfg.lang) ? (opts.lang !== undefined ? opts.lang : cfg.lang) : 'en';
     const validTypes: SiteType[] = ['content', 'tool', 'game'];
-    const siteType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : undefined;
+    const siteType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : (cfg.siteType || undefined);
+    const timeout = opts.timeout !== undefined ? parseInt(opts.timeout, 10) : cfg.timeout;
+    const maxCrawl = opts.maxCrawl !== undefined ? parseInt(opts.maxCrawl, 10) : cfg.maxCrawl;
+    const maxPages = opts.pageLimit !== undefined ? parseInt(opts.pageLimit, 10) : cfg.maxPages;
+    const maxContent = opts.contentLimit !== undefined ? parseInt(opts.contentLimit, 10) : cfg.maxContent;
+    const sampleMin = opts.sampleMin !== undefined ? parseInt(opts.sampleMin, 10) : cfg.sampleMin;
+    const sampleRatio = opts.sampleRatio !== undefined ? parseFloat(opts.sampleRatio) : cfg.sampleRatio;
+    const concurrency = opts.concurrency !== undefined ? parseInt(opts.concurrency, 10) : cfg.concurrency;
+    const outputDir = opts.output !== undefined ? opts.output : cfg.output;
+    const aiEnabled = opts.ai !== undefined ? opts.ai : cfg.ai;
+    const skipAi = !aiEnabled;
+    const expertFlag = opts.expert !== undefined ? opts.expert : cfg.expert;
 
     // Detect-only mode: use shared detection function
     if (opts.detectOnly) {
-      await detectSiteTopic(url, lang, parseInt(opts.timeout, 10), !!opts.json, siteType, opts.ai !== false, opts.apiKey);
+      await detectSiteTopic(url, lang, timeout, !!opts.json, siteType, aiEnabled, opts.apiKey);
       return;
     }
 
@@ -254,7 +278,7 @@ program
         try {
           process.stderr.write(chalk.gray('  Detecting site topic from homepage...\n'));
           const homePage = await browser.newPage();
-          const homeData = await fetchPage(homePage, url, parseInt(opts.timeout, 10));
+          const homeData = await fetchPage(homePage, url, timeout);
           await homePage.close();
           siteTopic = await analyzeSiteTopic(
             { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
@@ -263,7 +287,7 @@ program
           process.stderr.write(chalk.gray(`  Site topic: ${siteTopic.topic} (${siteTopic.type})\n`));
         } catch {}
 
-        const exitCode = await analyzeSinglePage(browser, pageUrl, apiKey, lang, parseInt(opts.timeout, 10), !!opts.json, siteTopic);
+        const exitCode = await analyzeSinglePage(browser, pageUrl, apiKey, lang, timeout, !!opts.json, siteTopic);
         await browser.close();
         process.exit(exitCode);
       } catch (err) {
@@ -278,26 +302,24 @@ program
     try {
       let lastProgress = '';
 
-      // AI defaults to on; skipAi is true only when --no-ai
-      const skipAi = !opts.ai;
       // Expert: auto-enabled when expert config differs from fast config and --no-expert not set
       const expertM = getExpertModel();
       const fastM = getFastModel();
       const expertAvailable = expertM !== fastM;
-      const runExpert = opts.expert !== false && expertAvailable && !skipAi;
+      const runExpert = expertFlag !== false && expertAvailable && !skipAi;
 
       const report = await check({
         url,
-        maxCrawl: parseInt(opts.maxCrawl, 10),
-        maxPages: parseInt(opts.pageLimit, 10),
-        maxContent: parseInt(opts.contentLimit, 10),
-        sampleMin: parseInt(opts.sampleMin, 10),
-        sampleRatio: parseFloat(opts.sampleRatio),
+        maxCrawl,
+        maxPages,
+        maxContent,
+        sampleMin,
+        sampleRatio,
         siteType,
         skipAi,
         expert: runExpert,
-        concurrency: parseInt(opts.concurrency, 10),
-        timeout: parseInt(opts.timeout, 10),
+        concurrency,
+        timeout,
         apiKey: opts.apiKey,
         lang,
         onProgress: (msg: string) => {
@@ -316,7 +338,7 @@ program
       if (opts.save !== false) {
         const ts = formatTimestamp();
         const domain = getDomain(url);
-        const outDir = join(process.cwd(), opts.output);
+        const outDir = outputDir.startsWith('/') ? outputDir : join(process.cwd(), outputDir);
         try {
           mkdirSync(outDir, { recursive: true });
           const jsonPath = join(outDir, `${domain}-${ts}.json`);
@@ -344,17 +366,19 @@ program
   .description('Analyze a single page value with AI five-dimension scoring')
   .argument('<url>', 'Page URL to analyze')
   .option('-j, --json', 'Output JSON to stdout')
-  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('-t, --timeout <ms>', 'Page load timeout')
   .option('--api-key <key>', 'AI API key')
-  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
   .option('-r, --relevance', 'Check relevance against site topic (auto-detects from page URL)')
   .option('--site <url>', 'Override site URL for topic detection (useful for cross-site checks or local dev)')
   .action(async (pageUrl: string, opts) => {
     const url = pageUrl.startsWith('http') ? pageUrl : 'https://' + pageUrl;
-    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
-    const apiKey = opts.apiKey || process.env.AI_API_KEY;
+    const cfg = loadConfig();
+    const lang: Lang = isValidLang(opts.lang !== undefined ? opts.lang : cfg.lang) ? (opts.lang !== undefined ? opts.lang : cfg.lang) : 'en';
+    const timeout = opts.timeout !== undefined ? parseInt(opts.timeout, 10) : cfg.timeout;
+    const apiKey = opts.apiKey || process.env.AI_API_KEY || cfg.fastModel.apiKey;
     if (!apiKey) {
-      console.error(chalk.red('Error: AI API key required (set AI_API_KEY env or use --api-key)'));
+      console.error(chalk.red('Error: AI API key required (set AI_API_KEY env, config file, or use --api-key)'));
       process.exit(1);
     }
     const browser = new BrowserManager();
@@ -373,7 +397,7 @@ program
           try {
             process.stderr.write(chalk.gray(`  Detecting site topic from ${siteUrl}...\n`));
             const homePage = await browser.newPage();
-            const homeData = await fetchPage(homePage, siteUrl, parseInt(opts.timeout, 10));
+            const homeData = await fetchPage(homePage, siteUrl, timeout);
             await homePage.close();
             siteTopic = await analyzeSiteTopic(
               { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
@@ -386,7 +410,7 @@ program
         }
       }
 
-      const exitCode = await analyzeSinglePage(browser, url, apiKey, lang, parseInt(opts.timeout, 10), !!opts.json, siteTopic);
+      const exitCode = await analyzeSinglePage(browser, url, apiKey, lang, timeout, !!opts.json, siteTopic);
       await browser.close();
       process.exit(exitCode);
     } catch (err) {
@@ -402,16 +426,19 @@ program
   .description('Detect site type and topic from homepage')
   .argument('<url>', 'Site URL to analyze')
   .option('-j, --json', 'Output JSON to stdout')
-  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('-t, --timeout <ms>', 'Page load timeout')
   .option('--api-key <key>', 'AI API key')
-  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
   .option('--type <type>', 'Force site type (content|tool|game|video|reference), skip AI detection')
   .action(async (siteUrl: string, opts) => {
     const url = siteUrl.startsWith('http') ? siteUrl : 'https://' + siteUrl;
-    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+    const cfg = loadConfig();
+    const lang: Lang = isValidLang(opts.lang !== undefined ? opts.lang : cfg.lang) ? (opts.lang !== undefined ? opts.lang : cfg.lang) : 'en';
     const validTypes: SiteType[] = ['content', 'tool', 'game', 'video', 'reference'];
     const forcedType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : undefined;
-    await detectSiteTopic(url, lang, parseInt(opts.timeout, 10), !!opts.json, forcedType, true, opts.apiKey);
+    const timeout = opts.timeout !== undefined ? parseInt(opts.timeout, 10) : cfg.timeout;
+    const apiKey = opts.apiKey || process.env.AI_API_KEY || cfg.fastModel.apiKey;
+    await detectSiteTopic(url, lang, timeout, !!opts.json, forcedType, true, apiKey);
   });
 
 // Evaluate approval probability from an existing JSON report
@@ -419,7 +446,7 @@ program
   .command('eval')
   .description('Evaluate approval probability from an existing JSON report')
   .argument('<report>', 'Path to a JSON report file')
-  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
   .option('--expert', 'Run expert model assessment in addition to fast model (default: auto when configured)')
   .option('--no-expert', 'Disable expert model assessment')
   .option('--json', 'Output JSON comparison to stdout')
@@ -533,6 +560,129 @@ program
     if (fast) console.log(`  Fast (${fastM}): ~${fast.probability}%`);
     if (expert) console.log(`  Expert (${expertM}): ~${expert.probability}%`);
     console.log('');
+  });
+
+// Site-wide basic info check: hard requirements only
+program
+  .command('site')
+  .description('Quick check: site-wide hard requirements (required pages, robots.txt, sitemap, ads.txt, policy keywords)')
+  .argument('<url>', 'Site URL to check')
+  .option('-j, --json', 'Output JSON to stdout')
+  .option('-t, --timeout <ms>', 'Page load timeout')
+  .option('-o, --output <dir>', 'Report output directory')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
+  .action(async (siteUrl: string, opts) => {
+    const url = siteUrl.startsWith('http') ? siteUrl : 'https://' + siteUrl;
+    try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
+    const cfg = loadConfig();
+    const lang: Lang = isValidLang(opts.lang !== undefined ? opts.lang : cfg.lang) ? (opts.lang !== undefined ? opts.lang : cfg.lang) : 'en';
+    const timeout = opts.timeout !== undefined ? parseInt(opts.timeout, 10) : cfg.timeout;
+    const outputDir = opts.output !== undefined ? opts.output : cfg.output;
+
+    process.stderr.write(chalk.cyan(`● Checking site basics: ${url}\n`));
+
+    try {
+      const report = await checkSiteBasic(url, timeout, lang);
+      process.stderr.write('\r' + ' '.repeat(80) + '\r');
+
+      if (opts.json) {
+        console.log(renderJsonReport(report));
+      } else {
+        console.log(renderTerminalReport(report));
+      }
+
+      if (opts.save !== false) {
+        const ts = formatTimestamp();
+        const domain = getDomain(url);
+        const outDir = outputDir.startsWith('/') ? outputDir : join(process.cwd(), outputDir);
+        try {
+          mkdirSync(outDir, { recursive: true });
+          const jsonPath = join(outDir, `${domain}-site-${ts}.json`);
+          writeFileSync(jsonPath, renderJsonReport(report), 'utf-8');
+          process.stderr.write(chalk.green(`  Report saved: ${jsonPath}\n`));
+        } catch { /* silent */ }
+      }
+
+      const hasFail = report.categories.some(c => c.items.some(i => i.status === 'fail'));
+      process.exit(hasFail ? 1 : 0);
+    } catch (err) {
+      console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+      process.exit(2);
+    }
+  });
+
+// Homepage quality check
+program
+  .command('home')
+  .description('Quick check: homepage quality (H1, internal links, load speed, viewport, mobile UX)')
+  .argument('<url>', 'Site URL to check')
+  .option('-j, --json', 'Output JSON to stdout')
+  .option('-t, --timeout <ms>', 'Page load timeout')
+  .option('-o, --output <dir>', 'Report output directory')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`)
+  .action(async (siteUrl: string, opts) => {
+    const url = siteUrl.startsWith('http') ? siteUrl : 'https://' + siteUrl;
+    try { new URL(url); } catch { console.error(chalk.red(`Error: Invalid URL "${url}"`)); process.exit(1); }
+    const cfg = loadConfig();
+    const lang: Lang = isValidLang(opts.lang !== undefined ? opts.lang : cfg.lang) ? (opts.lang !== undefined ? opts.lang : cfg.lang) : 'en';
+    const timeout = opts.timeout !== undefined ? parseInt(opts.timeout, 10) : cfg.timeout;
+    const outputDir = opts.output !== undefined ? opts.output : cfg.output;
+
+    process.stderr.write(chalk.cyan(`● Checking homepage quality: ${url}\n`));
+
+    try {
+      const report = await checkHomeQuality(url, timeout, lang);
+      process.stderr.write('\r' + ' '.repeat(80) + '\r');
+
+      if (opts.json) {
+        console.log(renderJsonReport(report));
+      } else {
+        console.log(renderTerminalReport(report));
+      }
+
+      if (opts.save !== false) {
+        const ts = formatTimestamp();
+        const domain = getDomain(url);
+        const outDir = outputDir.startsWith('/') ? outputDir : join(process.cwd(), outputDir);
+        try {
+          mkdirSync(outDir, { recursive: true });
+          const jsonPath = join(outDir, `${domain}-home-${ts}.json`);
+          writeFileSync(jsonPath, renderJsonReport(report), 'utf-8');
+          process.stderr.write(chalk.green(`  Report saved: ${jsonPath}\n`));
+        } catch { /* silent */ }
+      }
+
+      const hasFail = report.categories.some(c => c.items.some(i => i.status === 'fail'));
+      process.exit(hasFail ? 1 : 0);
+    } catch (err) {
+      console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+      process.exit(2);
+    }
+  });
+
+// Initialize config file
+program
+  .command('init')
+  .description('Generate a .adsense-check.yaml config file with built-in defaults')
+  .option('--global', 'Write to home directory instead of current directory')
+  .action(async (opts) => {
+    const configPath = opts.global ? getGlobalConfigPath() : getConfigPath();
+    const label = opts.global ? 'global config' : 'project config';
+
+    // Backup existing config if present
+    if (existsSync(configPath)) {
+      const backupPath = configPath + '.bak';
+      try {
+        copyFileSync(configPath, backupPath);
+        process.stderr.write(chalk.yellow(`  Backed up existing ${label}: ${backupPath}\n`));
+      } catch {
+        process.stderr.write(chalk.yellow(`  Warning: Could not backup existing ${label}\n`));
+      }
+    }
+
+    // Generate config with built-in defaults
+    saveConfig(DEFAULTS, configPath);
+    process.stderr.write(chalk.green(`  Created ${label}: ${configPath}\n`));
   });
 
 program.parse();

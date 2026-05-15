@@ -173,32 +173,41 @@ export function renderTerminalReport(report: CheckReport): string {
   // ============================================================
   // 1. CONCLUSION — verdict + approval probability
   // ============================================================
-  const aiProb = report.expertSummary?.probability ?? report.fastSummary?.probability ?? null;
-  const aiLow = aiProb !== null && aiProb < 70;
-
-  const scoreColor = report.compositeScore >= 80 ? chalk.green.bold : report.compositeScore >= 50 ? chalk.yellow.bold : chalk.red.bold;
-
-  // Itemized scores — placed right after composite score
-  const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
+  const hasComposite = report.compositeScore > 0 || report.pageValueScore > 0;
   const siteColor = (report.siteQuality ?? 0) >= 80 ? chalk.green : (report.siteQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
   const homeColor = (report.homeQuality ?? 0) >= 80 ? chalk.green : (report.homeQuality ?? 0) >= 60 ? chalk.yellow : chalk.red;
+  const votColor = (report.pageValueScore ?? 0) >= 70 ? chalk.green : (report.pageValueScore ?? 0) >= 50 ? chalk.yellow : chalk.red;
 
-  lines.push(chalk.bold(`  ${t('report.section.conclusion', lang)}`));
-  lines.push('');
-  lines.push(`  ${t('report.composite_score', lang)}: ${scoreColor(`${report.compositeScore}/100`)}`);
-  lines.push(`  ┌─ ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
-  lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
-  lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
-  lines.push(chalk.gray(`  │`));
-  lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
-  if (report.pageValueEstimated) {
-    lines.push(chalk.yellow(`  │  ⚠ ${t('reporter.value_estimated_note', lang)}`));
+  if (hasComposite) {
+    const aiProb = report.expertSummary?.probability ?? report.fastSummary?.probability ?? null;
+    const aiLow = aiProb !== null && aiProb < 70;
+
+    const scoreColor = report.compositeScore >= 80 ? chalk.green.bold : report.compositeScore >= 50 ? chalk.yellow.bold : chalk.red.bold;
+
+    lines.push(chalk.bold(`  ${t('report.section.conclusion', lang)}`));
+    lines.push('');
+    lines.push(`  ${t('report.composite_score', lang)}: ${scoreColor(`${report.compositeScore}/100`)}`);
+    lines.push(`  ┌─ ${siteColor(t('report.composite_site', lang))}: ${siteColor(Math.round(report.siteQuality ?? 0) + '/100')}`);
+    lines.push(`  │  ${homeColor(t('report.composite_home', lang))}: ${homeColor(Math.round(report.homeQuality ?? 0) + '/100')}`);
+    lines.push(`  │  ${votColor(t('report.composite_value', lang))}: ${votColor(Math.round(report.pageValueScore ?? 0) + '/100')}`);
+    lines.push(chalk.gray(`  │`));
+    lines.push(chalk.gray(`  │  ${t('reporter.formula_new', lang, { value: Math.round(report.pageValueScore ?? 0), site: Math.round(report.siteQuality ?? 0), home: Math.round(report.homeQuality ?? 0), total: report.compositeScore })}`));
+    if (report.pageValueEstimated) {
+      lines.push(chalk.yellow(`  │  ⚠ ${t('reporter.value_estimated_note', lang)}`));
+    }
+    if (report.warningPenalty > 0) {
+      lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
+    }
+    lines.push(chalk.gray(`  └─`));
+    lines.push('');
+  } else {
+    // No composite score (info subcommand)
+    const isHome = report.homeQuality > 0 && report.siteQuality === 0;
+    lines.push(chalk.bold(`  ${t(isHome ? 'info.home_title' : 'info.site_title', lang)}`));
+    lines.push('');
+    lines.push(chalk.gray(`  ${t(isHome ? 'info.home_subtitle' : 'info.site_subtitle', lang)}`));
+    lines.push('');
   }
-  if (report.warningPenalty > 0) {
-    lines.push(chalk.yellow(`  │  ⚠ ${t('report.warning_ratio', lang, { count: report.warned, total: report.totalChecks, pct: Math.round(report.warningRatio * 100) })} → ${t('report.warning_penalty', lang, { points: report.warningPenalty })}`));
-  }
-  lines.push(chalk.gray(`  └─`));
-  lines.push('');
 
   // Approval probability
   const est = report.approvalEstimate;
