@@ -8,6 +8,11 @@ export interface PageSignals {
   textLength: number;
   gameLinks: number;
   videoElementCount: number;
+  // Listing page structure signals
+  listItems: number;
+  hasPagination: boolean;
+  hasCategories: boolean;
+  hasSearch: boolean;
 }
 
 export interface SiteTypeResult {

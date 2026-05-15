@@ -70,6 +70,7 @@ export interface CheckReport {
   samplingInfo?: {
     pagesAnalyzed: number;       // total pages actually analyzed
     aiAnalyzed: number;          // pages with AI analysis
+    totalDiscovered: number;     // total internal URLs discovered for sampling
     confidence: 'high' | 'medium' | 'low';
   };
   categories: CheckCategory[];

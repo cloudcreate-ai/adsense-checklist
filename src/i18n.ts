@@ -158,6 +158,10 @@ const en: Record<string, string> = {
   'ai.compliance_suspicious': '{count}/{total} pages with potentially non-compliant content',
   'ai.compliance_ok': 'No compliance issues detected by AI',
 
+  // Embed warnings
+  'embed.game_verify_warning': 'Embedded game functionality requires manual verification',
+  'embed.video_verify_warning': 'Embedded video functionality requires manual verification',
+
   // Reporter
   'report.title': 'AdSense Checklist Report',
   'report.composite_score': 'Composite Score',
@@ -182,6 +186,8 @@ const en: Record<string, string> = {
   'report.hard.warn': 'NEEDS FIXES — {count} warning(s) to address',
   'report.hard.fail': 'NOT READY — {count} failure(s) must be fixed',
   'report.verdict_title': 'Review Verdict',
+  'report.verdict': 'Verdict',
+  'report.model': 'Model',
   'report.verdict_fail_suffix': 'failure(s) must be fixed',
   'report.verdict_warn_suffix': 'warning(s) to address',
   'report.verdict.ai_quality': 'content quality needs improvement (see AI assessment below)',
@@ -308,7 +314,7 @@ const en: Record<string, string> = {
   'md.table.pages': 'Pages Analyzed',
   'md.table.ai_analyzed': 'AI analyzed',
   'md.table.confidence': 'confidence',
-  'md.composite_score_title': 'Composite Score',
+  'md.composite_score_title': 'Overall Score',
   'md.hard_requirements': 'Hard Requirements',
   'md.soft_scoring': 'Smart Scoring',
   'md.ai_value_title': 'Value Analysis',
@@ -348,6 +354,10 @@ const en: Record<string, string> = {
   'md.table.title': 'Title',
   'md.problem_pages': 'Problem Page Details',
   'md.ai_status': 'AI Status',
+  'md.ai_status.pass': 'Pass',
+  'md.ai_status.warn': 'Warning',
+  'md.ai_status.fail': 'Fail',
+  'md.approval_model': 'Model',
   'md.five_dimensions': 'Five-dimension scores',
   'md.four_dimensions': 'Four-dimension scores',
   'md.ai_composite_score': 'AI composite score',
@@ -509,6 +519,10 @@ const zh: Record<string, string> = {
   'policy.keywords.fail': '检测到 {count} 个可疑关键词',
   'policy.keywords.warn': '检测到 {count} 个可疑关键词（位于内容充实页面，请结合 AI 分析确认）',
 
+  // 嵌入警告
+  'embed.game_verify_warning': '嵌入游戏功能需人工校验是否可正常游玩',
+  'embed.video_verify_warning': '嵌入视频功能需人工校验是否可正常播放',
+
   // AI 消息
   'ai.skip': '未配置 AI_API_KEY，跳过 AI 分析',
   'ai.fail': 'AI 分析失败: {error}',
@@ -520,7 +534,7 @@ const zh: Record<string, string> = {
 
   // 报告
   'report.title': 'AdSense 审核检查报告',
-  'report.composite_score': '综合评分',
+  'report.composite_score': '总分',
   'report.score': '评分',
   'report.ready': 'READY — 可以提交 AdSense 审核',
   'report.mostly': 'MOSTLY READY — 修复 {count} 项警告后可提交审核',
@@ -542,6 +556,8 @@ const zh: Record<string, string> = {
   'report.hard.warn': 'NEEDS FIXES — {count} 项警告待修复',
   'report.hard.fail': 'NOT READY — {count} 项失败必须修复',
   'report.verdict_title': '审核结论',
+  'report.verdict': '结论',
+  'report.model': '模型',
   'report.verdict_fail_suffix': '项失败必须修复',
   'report.verdict_warn_suffix': '项警告待修复',
   'report.verdict.ai_quality': '内容质量需提升（详见下方 AI 评估）',
@@ -670,7 +686,7 @@ const zh: Record<string, string> = {
   'md.table.pages': '分析页面',
   'md.table.ai_analyzed': 'AI 分析',
   'md.table.confidence': '置信度',
-  'md.composite_score_title': '综合评分',
+  'md.composite_score_title': '总分',
   'md.hard_requirements': '硬性要求',
   'md.soft_scoring': '智能评分',
   'md.ai_value_title': '价值分析',
@@ -710,6 +726,10 @@ const zh: Record<string, string> = {
   'md.table.title': '标题',
   'md.problem_pages': '问题页面详情',
   'md.ai_status': 'AI 评估',
+  'md.ai_status.pass': '通过',
+  'md.ai_status.warn': '警告',
+  'md.ai_status.fail': '失败',
+  'md.approval_model': '模型',
   'md.five_dimensions': '五维评分',
   'md.four_dimensions': '四维评分',
   'md.ai_composite_score': '价值综合分',

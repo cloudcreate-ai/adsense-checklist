@@ -1,4 +1,5 @@
 import type { SiteTopic, SiteType } from '../types.js';
+import { loadPrompt, renderPrompt } from './prompts.js';
 
 function getApiEndpoint(): string {
   const base = process.env.AI_API_BASE || 'https://api.deepseek.com';
@@ -135,33 +136,14 @@ export async function analyzeSiteTopic(
   const navText = homepage.navText.slice(0, 500);
   const desc = homepage.metaInfo?.description || homepage.metaInfo?.ogDescription || '(none)';
 
-  const prompt = `You are a web analyst. The following website has incomplete or unclear metadata (missing title and/or description). Analyze its content and determine the site type and topic.
-
-Website title (from browser): ${title || '(none)'}
-Meta description: ${desc}
-Navigation: ${navText}
-Homepage content (first 2000 chars):
-${content}
-
-Classify this website into ONE of these types:
-- "content": informational site (news, blog, educational articles, guides)
-- "tool": utility/tool site (calculator, converter, generator, online tool)
-- "game": online game site (playable games, game portal)
-- "video": video site (video sharing, video blog, YouTube-style site with embedded videos)
-- "reference": wiki/encyclopedia/reference site (structured knowledge base, searchable database, glossary, dictionary, encyclopedia-style content with interlinked articles, transcript archive)
-- "unsupported": e-commerce, SaaS product, social media, forum, portfolio, or anything not fitting above categories
-
-Reply language: ${langName}
-
-Reply in ${langName} with JSON:
-{
-  "type": "content|tool|game|video|reference|unsupported",
-  "topic": "Main topic in 3-5 words (e.g. 'Excel translation reference')",
-  "description": "One sentence describing what this site does",
-  "confidence": "high|medium|low",
-  "reasoning": "Brief explanation of why this type was chosen",
-  "metaSuggestions": ["Suggested improvement for site title", "Suggested improvement for meta description"]
-}`;
+  const template = loadPrompt('topic-analysis');
+  const prompt = renderPrompt(template, {
+    title: title || '(none)',
+    metaDescription: desc,
+    navText: navText.slice(0, 500),
+    content: content,
+    langName,
+  });
 
   try {
     const text = await callAI(prompt, apiKey);

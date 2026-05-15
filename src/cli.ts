@@ -40,8 +40,10 @@ program
   .option('-c, --content-limit <number>', 'Max content pages to crawl', '20')
   .option('--sample-min <number>', 'Min content pages to sample', '20')
   .option('--sample-ratio <ratio>', 'Content page sampling ratio (0-1)', '0.2')
-  .option('--ai', 'Enable AI content quality analysis', false)
-  .option('--expert', 'Enable expert AI summary and approval probability (requires --ai)', false)
+  .option('--ai', 'Enable AI content quality analysis (default: true)', true)
+  .option('--no-ai', 'Disable AI content quality analysis')
+  .option('--expert', 'Enable expert model assessment (default: auto when configured)')
+  .option('--no-expert', 'Disable expert model assessment')
   .option('-b, --concurrency <number>', 'AI batch concurrency (pages per batch)', '5')
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
@@ -72,9 +74,9 @@ program
         const domResult = detectSiteType([data.signals], data.navText + ' ' + data.footerText, siteType);
         process.stderr.write(chalk.gray(`  DOM detection: ${domResult.type} (${domResult.confidence})\n`));
 
-        // AI-based detection (if enabled)
+        // AI-based detection (if enabled — default on)
         const apiKey = opts.apiKey || process.env.AI_API_KEY;
-        if (opts.ai && apiKey) {
+        if (opts.ai !== false && apiKey) {
           process.stderr.write(chalk.gray('  AI: analyzing topic...\n'));
           const topic = await analyzeSiteTopic(
             { title: data.title, text: data.text, navText: data.navText + ' ' + data.footerText },
@@ -209,6 +211,15 @@ program
 
     try {
       let lastProgress = '';
+
+      // AI defaults to on; skipAi is true only when --no-ai
+      const skipAi = !opts.ai;
+      // Expert: auto-enabled when expert config differs from fast config and --no-expert not set
+      const expertM = getExpertModel();
+      const fastM = getFastModel();
+      const expertAvailable = expertM !== fastM;
+      const runExpert = opts.expert !== false && expertAvailable && !skipAi;
+
       const report = await check({
         url,
         maxCrawl: parseInt(opts.maxCrawl, 10),
@@ -217,8 +228,8 @@ program
         sampleMin: parseInt(opts.sampleMin, 10),
         sampleRatio: parseFloat(opts.sampleRatio),
         siteType,
-        skipAi: !opts.ai,
-        expert: opts.expert,
+        skipAi,
+        expert: runExpert,
         concurrency: parseInt(opts.concurrency, 10),
         timeout: parseInt(opts.timeout, 10),
         apiKey: opts.apiKey,
@@ -267,7 +278,8 @@ program
   .description('Evaluate approval probability from an existing JSON report')
   .argument('<report>', 'Path to a JSON report file')
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
-  .option('--expert', 'Run expert model assessment in addition to fast model', false)
+  .option('--expert', 'Run expert model assessment in addition to fast model (default: auto when configured)')
+  .option('--no-expert', 'Disable expert model assessment')
   .option('--json', 'Output JSON comparison to stdout')
   .action(async (reportPath: string, opts) => {
     const { readFile } = await import('node:fs/promises');
@@ -345,7 +357,8 @@ program
     // 3. Expert model (only if different from fast)
     const fastM = getFastModel();
     const expertM = getExpertModel();
-    const shouldRunExpert = opts.expert && expertM !== fastM;
+    const expertAvailable = expertM !== fastM;
+    const shouldRunExpert = opts.expert !== false && expertAvailable;
     let expert: Awaited<ReturnType<typeof summarizeFinal>> = null;
     if (shouldRunExpert) {
       console.log(chalk.bold('─── 3. Expert model assessment ───'));
@@ -366,7 +379,9 @@ program
         console.log(chalk.gray('  Expert assessment returned null'));
       }
       console.log('');
-    } else if (opts.expert) {
+    } else if (opts.expert === false) {
+      console.log(chalk.gray(`  Expert model disabled via --no-expert\n`));
+    } else if (!expertAvailable) {
       console.log(chalk.gray(`  Expert model same as fast model (${fastM}), skipping\n`));
     }
 

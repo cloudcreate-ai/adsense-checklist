@@ -121,6 +121,9 @@ export function renderTerminalReport(report: CheckReport): string {
   const typeLabel = t(typeKey, lang);
   const confidenceLabel = report.siteTypeConfidence === 'high' ? '' : ` (${report.siteTypeConfidence})`;
 
+  const hardFailCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'fail').length;
+  const hardWarnCount = report.hardCategories.flatMap(c => c.items).filter(i => i.status === 'warn').length;
+
   const lines: string[] = [
     '',
     chalk.bold.cyan(`  ${t('report.title', lang)}`),
@@ -211,11 +214,27 @@ export function renderTerminalReport(report: CheckReport): string {
     }
 
     if (fast) {
-      lines.push(`    ${t('report.approval_fast', lang)}: ${probColor(t('report.approval_prob', lang, { prob: fast.probability }))} (${chalk.gray(fast.modelName)}) — ${chalk.gray(fast.detailedSummary.length > 60 ? fast.detailedSummary.slice(0, 57) + '...' : fast.detailedSummary)}`);
+      const fastConf = fast.probability >= 80 ? 'high' : fast.probability >= 60 ? 'medium' : 'low';
+      const fastConfLabel = t('report.approval_confidence', lang, { level: t(`conf.${fastConf}`, lang) });
+      lines.push(`    ${t('report.approval_fast', lang)}: ${probColor(t('report.approval_prob', lang, { prob: fast.probability }))} (${chalk.gray(fastConfLabel)})`);
+      lines.push(`    ${t('report.verdict', lang)}: ${chalk.gray(fast.verdict)}`);
+      lines.push(`    ${t('report.model', lang)}: ${chalk.gray(fast.modelName)}`);
+      if (fast.reasons.length > 0) {
+        for (const r of fast.reasons.slice(0, 3)) lines.push(chalk.gray(`      · ${r}`));
+      }
+      if (fast.detailedSummary) lines.push(chalk.gray(`    ${fast.detailedSummary}`));
     }
 
     if (exp) {
-      lines.push(`    ${t('report.approval_expert', lang)}: ${probColor(t('report.approval_prob', lang, { prob: exp.probability }))} (${chalk.gray(exp.modelName)}) — ${chalk.gray(exp.detailedSummary.length > 60 ? exp.detailedSummary.slice(0, 57) + '...' : exp.detailedSummary)}`);
+      const expConf = exp.probability >= 80 ? 'high' : exp.probability >= 60 ? 'medium' : 'low';
+      const expConfLabel = t('report.approval_confidence', lang, { level: t(`conf.${expConf}`, lang) });
+      lines.push(`    ${t('report.approval_expert', lang)}: ${probColor(t('report.approval_prob', lang, { prob: exp.probability }))} (${chalk.gray(expConfLabel)})`);
+      lines.push(`    ${t('report.verdict', lang)}: ${chalk.gray(exp.verdict)}`);
+      lines.push(`    ${t('report.model', lang)}: ${chalk.gray(exp.modelName)}`);
+      if (exp.reasons.length > 0) {
+        for (const r of exp.reasons.slice(0, 3)) lines.push(chalk.gray(`      · ${r}`));
+      }
+      if (exp.detailedSummary) lines.push(chalk.gray(`    ${exp.detailedSummary}`));
     }
 
     lines.push('');
@@ -506,35 +525,33 @@ export function renderMarkdownReport(report: CheckReport): string {
     }
 
     if (fast) {
+      const fastConf = fast.probability >= 80 ? 'high' : fast.probability >= 60 ? 'medium' : 'low';
       lines.push(`### ${t('md.approval_fast', lang)}`);
       lines.push('');
-      lines.push(`- **${t('md.approval_probability', lang)}**: ${fast.probability}% (${fast.modelName})`);
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${fast.probability}% (${t(`conf.${fastConf}`, lang)})`);
       lines.push(`- **${t('md.approval_verdict', lang)}**: ${fast.verdict}`);
-      lines.push(`- **${t('md.approval_summary', lang)}**: ${fast.detailedSummary}`);
+      lines.push(`- **${t('md.approval_model', lang)}**: ${fast.modelName}`);
       if (fast.reasons.length > 0) {
         lines.push(`- **${t('md.approval_reasons', lang)}**:`);
-        for (const r of fast.reasons) lines.push(`  - ${r}`);
+        for (const r of fast.reasons.slice(0, 3)) lines.push(`  - ${r}`);
       }
-      if (fast.topActions.length > 0) {
-        lines.push(`- **${t('md.approval_actions', lang)}**:`);
-        for (const a of fast.topActions) lines.push(`  - ${a}`);
-      }
+      lines.push(`- ${fast.detailedSummary}`);
+      lines.push('');
     }
 
     if (exp) {
+      const expConf = exp.probability >= 80 ? 'high' : exp.probability >= 60 ? 'medium' : 'low';
       lines.push(`### ${t('md.approval_expert', lang)}`);
       lines.push('');
-      lines.push(`- **${t('md.approval_probability', lang)}**: ${exp.probability}% (${exp.modelName})`);
+      lines.push(`- **${t('md.approval_probability', lang)}**: ${exp.probability}% (${t(`conf.${expConf}`, lang)})`);
       lines.push(`- **${t('md.approval_verdict', lang)}**: ${exp.verdict}`);
-      lines.push(`- **${t('md.approval_summary', lang)}**: ${exp.detailedSummary}`);
+      lines.push(`- **${t('md.approval_model', lang)}**: ${exp.modelName}`);
       if (exp.reasons.length > 0) {
         lines.push(`- **${t('md.approval_reasons', lang)}**:`);
-        for (const r of exp.reasons) lines.push(`  - ${r}`);
+        for (const r of exp.reasons.slice(0, 3)) lines.push(`  - ${r}`);
       }
-      if (exp.topActions.length > 0) {
-        lines.push(`- **${t('md.approval_actions', lang)}**:`);
-        for (const a of exp.topActions) lines.push(`  - ${a}`);
-      }
+      lines.push(`- ${exp.detailedSummary}`);
+      lines.push('');
     }
 
     lines.push('');
@@ -740,7 +757,7 @@ export function renderMarkdownReport(report: CheckReport): string {
           for (const issue of p.issues) lines.push(`- ⚠️ ${issue}`);
           if (p.ai) {
             const ai = p.ai;
-            const statusLabel = ai.status === 'pass' ? '通过' : ai.status === 'warn' ? '警告' : ai.status === 'fail' ? '失败' : ai.status;
+            const statusLabel = t(`md.ai_status.${ai.status}`, lang);
             lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${statusLabel}`);
             if (ai.valueScore != null) {
               lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}**`);

@@ -1,6 +1,7 @@
 import type { CheckReport } from '../types.js';
 import { callAIWithModel, extractJson, getExpertModel, getExpertApiBase, getExpertApiKey, getFastModel, getFastApiBase, getFastApiKey } from './analyzer.js';
 import { t } from '../i18n.js';
+import { loadPrompt, renderPrompt } from './prompts.js';
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
@@ -102,54 +103,28 @@ export async function summarizeFinal(
       return `- ${p.url}: [${a.status}] V=${a.valueScore ?? 5} O=${a.originalityScore ?? 5} R=${a.relevanceScore ?? 5} C=${a.complianceScore ?? 5} — ${a.assessment.slice(0, 100)}`;
     }).join('\n');
 
-  const dimStats = report.aiDimensionStats ? (() => {
-    const entries = Object.entries(report.aiDimensionStats) as Array<[string, { avg: number; min: number; lowCount: number }]>;
-    if (entries.length === 0) return '';
-    return `\nDimension stats:\n${entries.map(([key, d]) =>
-      `  ${key.charAt(0).toUpperCase() + key.slice(1)}: avg=${d.avg} min=${d.min} low=${d.lowCount}`
-    ).join('\n')}\n`;
-  })() : 'No dimension stats available.';
-
-  const siteTopic = report.siteTopic
-    ? `\nSite topic: ${report.siteTopic.topic}\nSite type: ${report.siteTopic.type}\nSite description: ${report.siteTopic.description}`
+  const pageValueNote = report.pageValueEstimated
+    ? '  (Estimated from structural quality signals — no AI analysis available)'
     : '';
 
-  const mechanical = `
-Composite score: ${report.compositeScore}/100
-Hard status: ${report.hardStatus}
-Hard: ${report.passed} pass / ${report.warned} warn / ${report.failed} fail
-Soft score: ${report.softScore}/100
-AI site score: ${report.siteAiScore}/100
-`;
-
-  const prompt = `You are an experienced Google AdSense reviewer. Based on the comprehensive audit report below, estimate the probability that this site will be approved by AdSense.
-
-Current date: ${date}
-Reply language: ${langName}. ALL text in the JSON output MUST be in ${langName}. Do NOT use any other language.
-${siteTopic}
-
-Mechanical check results:
-${mechanical}
-
-${dimStats}
-
-Per-page AI analysis:
-${pageSummaries || 'No per-page AI analysis available.'}
-
-Based on all the above, provide your expert assessment in ${langName} with JSON:
-{
-  "probability": <0-100 integer, your estimated approval probability>,
-  "verdict": "<short verdict like 'Likely Pass' / 'Likely Fail' / 'Uncertain'>",
-  "reasons": ["3-5 key reasons for your assessment"],
-  "topActions": ["2-3 highest-impact actions the site owner should take first"],
-  "detailedSummary": "<1-2 sentence paragraph summarizing the overall situation>"
-}
-
-Important:
-- Be honest and critical — AdSense reviewers are thorough, so your assessment should be too.
-- Consider content quality, originality, policy compliance, site completeness, and user experience.
-- If the site type is "tool", "game", or "video", consider whether there is sufficient supporting content beyond the core functionality.
-- STRICTLY use ${langName} for ALL string values in the JSON. No exceptions.`;
+  const template = loadPrompt('approval-summary');
+  const prompt = renderPrompt(template, {
+    date,
+    langName,
+    siteTopic: report.siteTopic
+      ? report.siteTopic.topic
+      : '(unknown)',
+    siteUrl: report.url,
+    siteType: report.siteType,
+    pagesAnalyzed: String(report.pages.length),
+    totalDiscovered: report.samplingInfo?.totalDiscovered ?? report.pages.length,
+    compositeScore: String(report.compositeScore),
+    pageValueScore: String(report.pageValueScore),
+    siteQuality: String(report.siteQuality),
+    homeQuality: String(report.homeQuality),
+    pageValueNote,
+    pageSummaries: pageSummaries || 'No per-page AI analysis available.',
+  });
 
   try {
     const text = await callAIWithModel(prompt, 2048, model, apiBase, apiKey);

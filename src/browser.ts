@@ -3,6 +3,7 @@ import type { PageSignals } from './detector.js';
 
 export class BrowserManager {
   private browser: Browser | null = null;
+  private contexts: Set<import('playwright').BrowserContext> = new Set();
 
   async launch(): Promise<Browser> {
     if (!this.browser) {
@@ -17,6 +18,8 @@ export class BrowserManager {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 720 },
     });
+    this.contexts.add(context);
+    context.on('close', () => this.contexts.delete(context));
     return context.newPage();
   }
 
@@ -28,10 +31,16 @@ export class BrowserManager {
       isMobile: true,
       hasTouch: true,
     });
+    this.contexts.add(context);
+    context.on('close', () => this.contexts.delete(context));
     return context.newPage();
   }
 
   async close(): Promise<void> {
+    // Close all contexts first to clean up pages
+    const contexts = [...this.contexts];
+    this.contexts.clear();
+    await Promise.all(contexts.map(c => c.close().catch(() => {})));
     if (this.browser) {
       await this.browser.close();
       this.browser = null;
@@ -53,8 +62,22 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
 
   const urlAfterRender = page.url();
 
-  // Small buffer after networkidle to let any final JS settle
-  await page.waitForTimeout(500);
+  // Game providers (instgame, gamedistribution, etc.) inject iframe src
+  // via JS after domcontentloaded. Wait up to 3s for any visible iframe
+  // to populate its src attribute. Returns immediately if already set.
+  try {
+    await page.waitForFunction(() => {
+      const iframes = Array.from(document.querySelectorAll('iframe'));
+      for (const f of iframes) {
+        const rect = f.getBoundingClientRect();
+        if (rect.width > 50 && rect.height > 50) {
+          const src = f.src || f.getAttribute('data-src') || f.getAttribute('data-lazy-src') || '';
+          if (src.length > 0) return true;
+        }
+      }
+      return iframes.length === 0; // no iframes, nothing to wait for
+    }, { timeout: 3000 });
+  } catch {}
 
   let text = await page.evaluate(() => document.body?.innerText ?? '');
 
@@ -92,7 +115,7 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
   }));
 
   const signals: PageSignals = await page.evaluate(() => {
-    const AD_DOMAINS = /googlesyndication|doubleclick|adservice|adsense|pagead|adnxs|amazon-adsystem|facebook\.com\/plugins/i;
+    const AD_DOMAINS = /googlesyndication|doubleclick|adservice|adsense|pagead|adnxs|amazon-adsystem|facebook\.com\/plugins|google\.com\/ads|googletagmanager|googletagservices/i;
 
     const iframes = Array.from(document.querySelectorAll('iframe'));
     const visibleIframes = iframes.filter(f => {
@@ -114,6 +137,29 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
       gameLinkPatterns.test((a as HTMLAnchorElement).href)
     ).length;
 
+    // ── Listing page structure signals ──
+    // List items: count article, figure, or common card containers
+    const listItems = document.querySelectorAll('article, figure, .card, .item, .entry, .post, .game-card, .video-card, .list-item, .result-item').length
+      || document.querySelectorAll('ul > li, ol > li').length;
+
+    // Pagination: next/prev links, page numbers, or rel="next"/"prev"
+    const hasPagination = !!document.querySelector(
+      'a[rel="next"], a[rel="prev"], .pagination, .page-nav, nav[aria-label*="page"], nav[aria-label*="Page"]'
+    ) || Array.from(document.querySelectorAll('a')).some(a => {
+      const text = a.textContent?.trim().toLowerCase() ?? '';
+      return /^(next|previous|prev|page\s*\d+|\d+\s*of\s*\d+|»|‹|›|«)$/.test(text);
+    });
+
+    // Categories: section/nav elements with category-like class names
+    const hasCategories = !!document.querySelector(
+      '.categories, .category-list, .tags, .tag-list, .genres, .genre-list, [class*="category"], [class*="filter"], [class*="sort"]'
+    );
+
+    // Search: form elements with search type or search inputs
+    const hasSearch = !!document.querySelector(
+      'input[type="search"], [role="search"], form[action*="search"], .search-form, .search-box, input[name="q"], input[name="search"], input[name="query"]'
+    );
+
     return {
       iframeCount: visibleIframes.length,
       iframeSrcs,
@@ -122,6 +168,10 @@ export async function fetchPage(page: Page, url: string, timeout: number = 30000
       textLength: (document.body?.innerText ?? '').replace(/\s+/g, '').length,
       gameLinks,
       videoElementCount: document.querySelectorAll('video').length,
+      listItems,
+      hasPagination,
+      hasCategories,
+      hasSearch,
     };
   });
 

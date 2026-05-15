@@ -1,4 +1,5 @@
 import type { CheckReport, CheckOptions, CheckCategory, CheckItem, PageDetail, Lang, SiteType, SiteTopic, PageType } from './types.js';
+import { t } from './i18n.js';
 import { BrowserManager, fetchPage, fetchSitemapUrls, isContentUrl } from './browser.js';
 import { checkContentQuality } from './checks/content.js';
 import { checkRequiredPages } from './checks/pages.js';
@@ -9,9 +10,14 @@ import { analyzeWithAI, analyzeBatch, analyzeOverall, type PageAiAnalysis } from
 import { estimateByRules, summarizeFinal } from './ai/approval.js';
 import { analyzeSiteTopic } from './ai/topic.js';
 import { detectSiteType, type PageSignals } from './detector.js';
+
+function embedTypeFromSignals(sig: PageSignals): 'game' | 'video' | 'none' {
+  if (sig.iframeCount > 0 || sig.canvasCount > 0) return 'game';
+  if (sig.videoElementCount > 0) return 'video';
+  return 'none';
+}
 import { classifyPage, PAGE_TYPE_WEIGHTS } from './classifier.js';
 import { scorePage, scoreCategory, computeCompositeScore } from './scorer.js';
-import { t } from './i18n.js';
 
 // ── Timing tracker ──────────────────────────────────────────────────────
 interface TimingPhase {
@@ -55,9 +61,10 @@ function extractMainContent(text: string, allPageTexts: string[]): string {
   }).join('\n\n');
 }
 
-function buildPageDetails(pages: Array<{ url: string; text: string; title: string; lang: string }>, aiAnalyses: PageAiAnalysis[], siteType: SiteType): PageDetail[] {
+function buildPageDetails(pages: Array<{ url: string; text: string; title: string; lang: string }>, aiAnalyses: PageAiAnalysis[], siteType: SiteType, lang: string, signals?: PageSignals[]): PageDetail[] {
   const allTexts = pages.map(p => p.text);
   const aiMap = new Map(aiAnalyses.map(a => [a.url, a]));
+  const sigMap = signals ? new Map(pages.map((p, i) => [p.url, signals[i]])) : new Map<string, PageSignals>();
   return pages.map(page => {
     const totalChars = page.text.replace(/\s+/g, '').length;
     const mainContent = extractMainContent(page.text, allTexts);
@@ -69,6 +76,12 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
     const aiStatus = ai?.status;
     const relevance = ai?.relevance;
     const pageType = ai?.inferredPageType ?? classifyPage(page.url);
+    const embed = sigMap.has(page.url) ? embedTypeFromSignals(sigMap.get(page.url)!) : 'none';
+
+    // Warn for game/video detail pages with embeds — AI can't verify embed functionality
+    // Skip warning for listing/homepage/content pages — they may have non-game iframes (ads, etc.)
+    if (embed === 'game' && pageType === 'game_detail') issues.push(t('embed.game_verify_warning', lang));
+    else if (embed === 'video' && pageType === 'video_detail') issues.push(t('embed.video_verify_warning', lang));
 
     // Skip content depth checks for required/utility pages — they don't need 300+ chars of editorial content
     const isFunctional = pageType === 'required' || pageType === 'utility';
@@ -194,10 +207,9 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       } catch {}
     }
 
-    const pages: Array<{ url: string; text: string; title: string; links: string[]; lang: string }> = [
-      { url: homeData.url, text: homeData.text, title: homeData.title, links: homeData.links, lang: homeData.pageInfo?.lang ?? 'en' },
+    const pages: Array<{ url: string; text: string; title: string; links: string[]; lang: string; signals: PageSignals }> = [
+      { url: homeData.url, text: homeData.text, title: homeData.title, links: homeData.links, lang: homeData.pageInfo?.lang ?? 'en', signals: homeData.signals },
     ];
-    const allSignals: PageSignals[] = [homeData.signals];
 
     const internalLinks = homeData.links.filter(l => {
       try {
@@ -225,25 +237,24 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const deadLinks: Array<{ url: string; status: string }> = [];
     const crawledUrls = new Set([homeData.url.split('#')[0].replace(/\/+$/, '')]);
 
-    async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[]; lang: string } | null> {
+    async function crawlPage(link: string): Promise<{ url: string; text: string; title: string; links: string[]; lang: string; signals: PageSignals } | null> {
       const norm = link.replace(/\/+$/, '').split('#')[0];
       if (crawledUrls.has(norm)) return null;
       crawledUrls.add(norm);
+      const pg = await browser.newPage();
       try {
-        const pg = await browser.newPage();
         const data = await fetchPage(pg, link, timeout);
         const postNorm = data.url.replace(/\/+$/, '').split('#')[0];
-        if (crawledUrls.has(postNorm) && postNorm !== norm) {
-          await pg.close();
-          return null;
-        }
+        if (crawledUrls.has(postNorm) && postNorm !== norm) return null;
         crawledUrls.add(postNorm);
-        if (data.status >= 400) { deadLinks.push({ url: link, status: String(data.status) }); await pg.close(); return null; }
-        const result = { url: data.url, text: data.text, title: data.title, links: data.links, lang: data.pageInfo?.lang ?? 'en' };
-        allSignals.push(data.signals);
+        if (data.status >= 400) { deadLinks.push({ url: link, status: String(data.status) }); return null; }
+        return { url: data.url, text: data.text, title: data.title, links: data.links, lang: data.pageInfo?.lang ?? 'en', signals: data.signals };
+      } catch {
+        deadLinks.push({ url: link, status: 'timeout' });
+        return null;
+      } finally {
         await pg.close();
-        return result;
-      } catch { deadLinks.push({ url: link, status: 'timeout' }); return null; }
+      }
     }
 
     // ── Pipeline: crawl + AI overlap ──
@@ -252,9 +263,16 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     let totalCrawled = 0;
     let crawlBatchNum = 0;
 
-    async function launchAIBatch(batchPages: Array<{ url: string; text: string; title: string; links: string[]; lang: string }>) {
+    async function launchAIBatch(batchPages: Array<{ url: string; text: string; title: string; links: string[]; lang: string; signals: PageSignals }>) {
       if (skipAi || !apiKeyResolved || batchPages.length === 0) return;
-      const p = analyzeBatch(batchPages.map(p => ({ url: p.url, text: p.text, lang: p.lang })), lang, apiKeyResolved, siteTopic, progress);
+      const p = analyzeBatch(
+        batchPages.map(bp => {
+          const et: 'game' | 'video' | 'none' = embedTypeFromSignals(bp.signals);
+          const listingSignals = { listItems: bp.signals.listItems, hasPagination: bp.signals.hasPagination, hasCategories: bp.signals.hasCategories, hasSearch: bp.signals.hasSearch };
+          return { url: bp.url, text: bp.text, lang: bp.lang, embedType: et, listingSignals };
+        }),
+        lang, apiKeyResolved, siteTopic, progress
+      );
       aiPromises.push(p.then(results => { aiAnalyses.push(...results); }));
     }
 
@@ -378,7 +396,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
 
     // Detect site type: prefer AI topic, fallback to DOM signals
     progress('Detecting site type...');
-    const domResult = detectSiteType(allSignals, homeData.navText + ' ' + homeData.footerText, manualType);
+    const domResult = detectSiteType(pages.map(p => p.signals), homeData.navText + ' ' + homeData.footerText, manualType);
     let siteType: SiteType;
     let siteTypeConfidence: 'high' | 'medium' | 'low';
 
@@ -401,7 +419,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const allCategories: CheckCategory[] = [];
 
     // Content quality → soft
-    const contentResult = checkContentQuality(uniquePages, allInternal.length, lang, siteType, allSignals);
+    const contentResult = checkContentQuality(uniquePages, allInternal.length, lang, siteType, pages.map(p => p.signals));
     const contentCat = contentResult.category;
     const contentDuplicationScore = contentResult.contentDuplicationScore;
     // Extract site scale → hard (it's a hard requirement: min 10 pages)
@@ -475,7 +493,15 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
         if (pageAnalyses.length === 0 && apiKeyResolved) {
           // Fallback: if pipeline didn't produce results, run analyzeWithAI
           progress(`AI analysis: ${uniquePages.length} pages...`);
-          const aiResult = await analyzeWithAI(uniquePages.map(p => ({ url: p.url, text: p.text, lang: (p as any).lang })), lang, apiKey, progress, siteTopic, concurrency);
+          const aiResult = await analyzeWithAI(
+            uniquePages.map((p, i) => {
+              const sig = pages[i]?.signals ?? null;
+              const et: 'game' | 'video' | 'none' = sig ? embedTypeFromSignals(sig) : 'none';
+              const listingSignals = sig ? { listItems: sig.listItems, hasPagination: sig.hasPagination, hasCategories: sig.hasCategories, hasSearch: sig.hasSearch } : undefined;
+              return { url: p.url, text: p.text, lang: (p as any).lang, embedType: et, listingSignals };
+            }),
+            lang, apiKey, progress, siteTopic, concurrency
+          );
           pageAnalyses = aiResult.pageAnalyses;
 
           // AI value analysis category (displayed in report)
@@ -544,7 +570,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
       }
     }
 
-    const pageDetails = buildPageDetails(uniquePages, pageAnalyses, siteType);
+    const pageDetails = buildPageDetails(uniquePages, pageAnalyses, siteType, lang, pages.map(p => p.signals));
 
     // Separate hard/soft categories
     const hardCategories = allCategories.filter(c => c.group === 'hard');
@@ -583,7 +609,7 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
     const partialReport: CheckReport = {
       url, timestamp: new Date().toISOString(), lang, siteType,
       siteTypeConfidence, siteTopic,
-      samplingInfo: { pagesAnalyzed: uniquePages.length, aiAnalyzed: pageAnalyses.length, confidence: uniquePages.length >= 10 ? 'high' : uniquePages.length >= 5 ? 'medium' : 'low' },
+      samplingInfo: { pagesAnalyzed: uniquePages.length, aiAnalyzed: pageAnalyses.length, totalDiscovered: allInternal.length, confidence: uniquePages.length >= 10 ? 'high' : uniquePages.length >= 5 ? 'medium' : 'low' },
       categories: allCategories, hardCategories, softCategories,
       score: allItems.filter(i => i.status === 'pass').length,
       totalChecks: allItems.length,
@@ -625,7 +651,14 @@ export async function check(options: CheckOptions): Promise<CheckReport> {
               true
             ) ?? undefined;
             timing.end();
-          } catch { /* silent */ }
+            if (!expertSummary) {
+              progress('Expert assessment: API returned empty result (model may not be available)');
+            }
+          } catch (e) {
+            progress(`Expert assessment failed: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        } else {
+          progress(`Expert assessment: skipped (expert model "${getExpertModel()}" same as fast model)`);
         }
       }
     }
