@@ -61,11 +61,14 @@ adsense-check https://example.com --page https://example.com/some-page
 
 ### Page Subcommand
 
-Analyze a single page without providing a site URL:
+Analyze a single page with AI five-dimension scoring:
 
 ```bash
-# Single-page AI value scoring (standalone)
+# Single-page AI value scoring (no site context)
 adsense-check page https://example.com/some-page
+
+# Check relevance against site topic (detects site topic from homepage first)
+adsense-check page https://example.com/some-page -r --site https://example.com/
 
 # With Chinese output
 adsense-check page https://example.com/some-page -l zh
@@ -73,6 +76,8 @@ adsense-check page https://example.com/some-page -l zh
 # JSON output
 adsense-check page https://example.com/some-page --json
 ```
+
+Without `-r/--relevance`, the page is scored in isolation and Relevance will always be high (the page defines its own topic). With `-r --site`, the site homepage is crawled first to detect the site topic, then the page's Relevance score reflects alignment with that theme.
 
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
 
@@ -204,12 +209,13 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 ### Page subcommand
 
 ```
-page <url>                  Analyze a single page with AI five-dimension scoring
-  -j, --json                Output JSON to stdout
-  -t, --timeout <ms>        Page load timeout (default: 30000)
-  --api-key <key>           AI API key
-  -l, --lang <lang>         Output language: en|zh (default: en)
-  --type <type>             Force site type for analysis context
+page [options] <url>          Analyze a single page with AI five-dimension scoring
+  -j, --json                  Output JSON to stdout
+  -t, --timeout <ms>          Page load timeout (default: 30000)
+  --api-key <key>             AI API key
+  -l, --lang <lang>           Output language: en|zh (default: en)
+  -r, --relevance             Check relevance against site topic
+  --site <url>                Site URL to detect topic for relevance comparison
 ```
 
 ### Eval subcommand
