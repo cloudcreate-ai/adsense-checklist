@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
+
 import 'dotenv/config';
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -203,7 +207,7 @@ const program = new Command();
 program
   .name('adsense-check')
   .description('Check if a website meets Google AdSense review requirements')
-  .version('1.0.0')
+  .version(version)
   .argument('<url>', 'Website URL to check')
   .option('-j, --json', 'Output JSON to stdout')
   .option('-n, --max-crawl <number>', 'Total page crawl limit')
