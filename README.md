@@ -55,8 +55,23 @@ adsense-check https://example.com -l zh
 # Only detect site type and topic
 adsense-check https://example.com --detect-only
 
-# Single-page value analysis
+# Single-page value analysis (legacy, requires site URL)
 adsense-check https://example.com --page https://example.com/some-page
+```
+
+### Page Subcommand
+
+Analyze a single page without providing a site URL:
+
+```bash
+# Single-page AI value scoring (standalone)
+adsense-check page https://example.com/some-page
+
+# With Chinese output
+adsense-check page https://example.com/some-page -l zh
+
+# JSON output
+adsense-check page https://example.com/some-page --json
 ```
 
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
@@ -184,6 +199,17 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 -l, --lang <lang>         Output language: en|zh (default: en)
 --type <type>             Force site type: content|tool|game|video|reference
 --detect-only             Only detect site type/topic, skip full check
+```
+
+### Page subcommand
+
+```
+page <url>                  Analyze a single page with AI five-dimension scoring
+  -j, --json                Output JSON to stdout
+  -t, --timeout <ms>        Page load timeout (default: 30000)
+  --api-key <key>           AI API key
+  -l, --lang <lang>         Output language: en|zh (default: en)
+  --type <type>             Force site type for analysis context
 ```
 
 ### Eval subcommand

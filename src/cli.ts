@@ -272,6 +272,116 @@ program
 
 program.enablePositionalOptions();
 
+// Single-page value analysis subcommand
+program
+  .command('page')
+  .description('Analyze a single page value with AI five-dimension scoring')
+  .argument('<url>', 'Page URL to analyze')
+  .option('-j, --json', 'Output JSON to stdout')
+  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('--api-key <key>', 'AI API key')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('--type <type>', 'Force site type for analysis context')
+  .action(async (pageUrl: string, opts) => {
+    let url = pageUrl.startsWith('http') ? pageUrl : 'https://' + pageUrl;
+    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+    const apiKey = opts.apiKey || process.env.AI_API_KEY;
+    if (!apiKey) {
+      console.error(chalk.red('Error: AI API key required (set AI_API_KEY env or use --api-key)'));
+      process.exit(1);
+    }
+    const browser = new BrowserManager();
+    try {
+      process.stderr.write(chalk.cyan(`● Analyzing page value: ${url}\n`));
+      const pg = await browser.newPage();
+      const data = await fetchPage(pg, url, parseInt(opts.timeout, 10));
+      await pg.close();
+
+      // Auto-detect topic from this page
+      process.stderr.write(chalk.gray('  Detecting topic...\n'));
+      let siteTopic;
+      try {
+        siteTopic = await analyzeSiteTopic(
+          { title: data.title, text: data.text, navText: data.navText + ' ' + data.footerText },
+          lang, apiKey
+        );
+        process.stderr.write(chalk.gray(`  Topic: ${siteTopic.topic} (${siteTopic.type})\n`));
+      } catch {}
+
+      // AI five-dimension analysis
+      process.stderr.write(chalk.gray('  AI: analyzing page value...\n'));
+      const result = await analyzeWithAI(
+        [{ url, text: data.text }],
+        lang, apiKey, undefined, siteTopic
+      );
+      const analysis = result.pageAnalyses[0];
+
+      if (!analysis) {
+        console.error(chalk.red('  AI analysis returned no results'));
+        process.exit(2);
+      }
+
+      const score = computePageAiScore(analysis);
+      const v = analysis.valueScore ?? 5;
+      const o = analysis.originalityScore ?? 5;
+      const r = analysis.relevanceScore ?? 5;
+      const c = analysis.complianceScore ?? 5;
+      const tr = analysis.translationScore ?? 5;
+
+      const dimColor = (s: number) => s >= 8 ? chalk.green : s >= 5 ? chalk.yellow : chalk.red;
+      const scoreColor = score >= 70 ? chalk.green : score >= 40 ? chalk.yellow : chalk.red;
+
+      const lines: string[] = [
+        '',
+        chalk.bold.cyan('  Page Value Analysis'),
+        chalk.gray(`  URL: ${url}`),
+        chalk.gray(`  Title: ${data.title}`),
+      ];
+      if (siteTopic) {
+        lines.push(chalk.gray(`  Site topic: ${siteTopic.topic} (${siteTopic.type})`));
+      }
+      lines.push('');
+      lines.push(`  ${dimColor(v)('Value')}        ${v}/10`);
+      lines.push(`  ${dimColor(o)('Originality')}  ${o}/10`);
+      lines.push(`  ${dimColor(r)('Relevance')}    ${r}/10`);
+      lines.push(`  ${dimColor(c)('Compliance')}   ${c}/10`);
+      lines.push(`  ${dimColor(tr)('Translation')}  ${tr}/10`);
+      lines.push('');
+      lines.push(chalk.bold(`  Overall: ${scoreColor(score + '/100')}`) + chalk.gray(' (geometric mean)'));
+      lines.push('');
+      if (analysis.assessment) {
+        lines.push(chalk.gray(`  ${analysis.assessment}`));
+        lines.push('');
+      }
+      for (const s of analysis.suggestions) {
+        lines.push(chalk.yellow(`  -> ${s}`));
+      }
+      lines.push('');
+
+      if (opts.json) {
+        console.log(JSON.stringify({
+          url,
+          title: data.title,
+          topic: siteTopic,
+          scores: { value: v, originality: o, relevance: r, compliance: c, translation: tr },
+          overall: score,
+          relevanceLabel: analysis.relevance,
+          assessment: analysis.assessment,
+          suggestions: analysis.suggestions,
+        }, null, 2));
+      } else {
+        console.log(lines.join('\n'));
+      }
+
+      await browser.close();
+      process.exit(c <= 2 ? 1 : 0);
+    } catch (err) {
+      await browser.close();
+      console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+      process.exit(2);
+    }
+  });
+
 // Evaluate approval probability from an existing JSON report
 program
   .command('eval')
