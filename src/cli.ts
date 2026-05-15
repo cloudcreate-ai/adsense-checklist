@@ -300,8 +300,8 @@ program
   .option('-t, --timeout <ms>', 'Page load timeout', '30000')
   .option('--api-key <key>', 'AI API key')
   .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
-  .option('-r, --relevance', 'Check relevance against site topic (requires --site)')
-  .option('--site <url>', 'Site URL to detect topic for relevance comparison')
+  .option('-r, --relevance', 'Check relevance against site topic (auto-detects from page URL)')
+  .option('--site <url>', 'Override site URL for topic detection (useful for cross-site checks or local dev)')
   .action(async (pageUrl: string, opts) => {
     const url = pageUrl.startsWith('http') ? pageUrl : 'https://' + pageUrl;
     const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
@@ -314,22 +314,28 @@ program
     try {
       process.stderr.write(chalk.cyan(`● Analyzing page value: ${url}\n`));
 
-      // Detect site topic from site homepage if --relevance with --site
+      // Detect site topic from homepage when -r is set
       let siteTopic: SiteTopic | undefined;
       if (opts.relevance) {
-        const siteUrl = opts.site.startsWith('http') ? opts.site : 'https://' + opts.site;
-        try {
-          process.stderr.write(chalk.gray(`  Detecting site topic from ${siteUrl}...\n`));
-          const homePage = await browser.newPage();
-          const homeData = await fetchPage(homePage, siteUrl, parseInt(opts.timeout, 10));
-          await homePage.close();
-          siteTopic = await analyzeSiteTopic(
-            { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
-            lang, apiKey
-          );
-          process.stderr.write(chalk.gray(`  Site topic: ${siteTopic.topic} (${siteTopic.type})\n`));
-        } catch (err) {
-          process.stderr.write(chalk.gray(`  ⚠ Failed to detect site topic: ${err instanceof Error ? err.message : String(err)}\n`));
+        const siteUrl = opts.site
+          ? (opts.site.startsWith('http') ? opts.site : 'https://' + opts.site)
+          : (() => { try { const u = new URL(url); return u.origin; } catch { return ''; } })();
+        if (!siteUrl) {
+          process.stderr.write(chalk.gray('  ⚠ Could not determine site URL from page URL\n'));
+        } else {
+          try {
+            process.stderr.write(chalk.gray(`  Detecting site topic from ${siteUrl}...\n`));
+            const homePage = await browser.newPage();
+            const homeData = await fetchPage(homePage, siteUrl, parseInt(opts.timeout, 10));
+            await homePage.close();
+            siteTopic = await analyzeSiteTopic(
+              { title: homeData.title, text: homeData.text, navText: homeData.navText + ' ' + homeData.footerText },
+              lang, apiKey
+            );
+            process.stderr.write(chalk.gray(`  Site topic: ${siteTopic.topic} (${siteTopic.type})\n`));
+          } catch (err) {
+            process.stderr.write(chalk.gray(`  ⚠ Failed to detect site topic: ${err instanceof Error ? err.message : String(err)}\n`));
+          }
         }
       }
 

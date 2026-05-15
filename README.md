@@ -67,8 +67,11 @@ Analyze a single page with AI five-dimension scoring:
 # Single-page AI value scoring (no site context)
 adsense-check page https://example.com/some-page
 
-# Check relevance against site topic (detects site topic from homepage first)
-adsense-check page https://example.com/some-page -r --site https://example.com/
+# Check relevance against site topic (auto-extracts origin from page URL)
+adsense-check page https://example.com/some-page -r
+
+# Override site URL for topic detection (cross-site check, local dev)
+adsense-check page https://example.com/some-page -r --site http://localhost:3000/
 
 # With Chinese output
 adsense-check page https://example.com/some-page -l zh
@@ -77,7 +80,7 @@ adsense-check page https://example.com/some-page -l zh
 adsense-check page https://example.com/some-page --json
 ```
 
-Without `-r/--relevance`, the page is scored in isolation and Relevance will always be high (the page defines its own topic). With `-r --site`, the site homepage is crawled first to detect the site topic, then the page's Relevance score reflects alignment with that theme.
+Without `-r/--relevance`, the page is scored in isolation and Relevance will always be high (the page defines its own topic). With `-r`, the site homepage is auto-extracted from the page URL (`https://example.com/blog/post` → `https://example.com`) and crawled first to detect the site topic, then the page's Relevance score reflects alignment with that theme. Use `--site` to override the auto-extracted origin for cross-site checks or local development.
 
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
 
@@ -214,8 +217,8 @@ page [options] <url>          Analyze a single page with AI five-dimension scori
   -t, --timeout <ms>          Page load timeout (default: 30000)
   --api-key <key>             AI API key
   -l, --lang <lang>           Output language: en|zh (default: en)
-  -r, --relevance             Check relevance against site topic
-  --site <url>                Site URL to detect topic for relevance comparison
+  -r, --relevance             Check relevance against site topic (auto-extracts origin)
+  --site <url>                Override site URL for topic detection
 ```
 
 ### Eval subcommand
