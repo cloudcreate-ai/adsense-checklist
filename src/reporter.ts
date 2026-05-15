@@ -91,7 +91,11 @@ function renderPage(lines: string[], page: PageDetail, lang: Lang) {
   const scoreLabels = votComposite != null
     ? `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')} | ${votScoreText}`
     : `${t('reporter.mechanical_label', lang)}: ${scoreColor(page.score + '/100')}`;
-  lines.push(`    ${ICONS[page.contentStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} ${scoreLabels}`);
+  // Determine display status: AI failure/warning overrides mechanical pass
+  const displayStatus = page.ai && page.ai.status !== 'pass' && page.contentStatus === 'pass'
+    ? page.ai.status
+    : page.contentStatus;
+  lines.push(`    ${ICONS[displayStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} ${scoreLabels}`);
   lines.push(chalk.gray(`       ${page.title}`));
   lines.push(`       ${t('report.content_label', lang)} ${page.contentRatio}% (${page.contentChars}/${page.totalChars})`);
   for (const issue of page.issues) lines.push(chalk.yellow(`       ! ${issue}`));
@@ -362,7 +366,12 @@ export function renderTerminalReport(report: CheckReport): string {
       const pageScoreColor = p.score >= 80 ? chalk.green : p.score >= 50 ? chalk.yellow : chalk.red;
       const typeIcon = PAGE_TYPE_ICONS[p.pageType] || chalk.gray('?');
 
-      lines.push(`    ${ICONS[p.contentStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} — ${t('reporter.mechanical_label', lang)}: ${pageScoreColor(p.score + '/100')}`);
+      // Determine display status: AI failure/warning overrides mechanical pass
+      const pageDisplayStatus = p.ai && p.ai.status !== 'pass' && p.contentStatus === 'pass'
+        ? p.ai.status
+        : p.contentStatus;
+
+      lines.push(`    ${ICONS[pageDisplayStatus]} ${typeIcon} ${langTag}${chalk.bold(path)} — ${t('reporter.mechanical_label', lang)}: ${pageScoreColor(p.score + '/100')}`);
       lines.push(chalk.gray(`       ${p.title}`));
       lines.push(`       ${t('report.content_label', lang)} ${p.contentRatio}% (${p.contentChars}/${p.totalChars})`);
       for (const issue of p.issues) lines.push(chalk.yellow(`       ! ${issue}`));
@@ -425,7 +434,7 @@ export function renderTerminalReport(report: CheckReport): string {
   }
 
   // AI suggestion when AI is not enabled
-  const hasAi = report.categories.some(c => c.group === 'soft' && (c.name.includes('AI') || c.name.includes('ai')));
+  const hasAi = report.siteAiScore > 0 || report.pages.some(p => p.ai);
   if (!hasAi) {
     lines.push('');
     lines.push(chalk.cyan(`  \u{1F4A1} ${t('ai.suggest_enable', lang)}`));
@@ -726,7 +735,11 @@ export function renderMarkdownReport(report: CheckReport): string {
 
       for (const p of [...problems, ...ok]) {
         const path = (() => { try { const u = new URL(p.url); return u.pathname + u.search; } catch { return p.url; } })();
-        const status = MD_ICONS[p.contentStatus];
+        // Determine display status: AI failure/warning overrides mechanical pass
+        const mdDisplayStatus = p.ai && p.ai.status !== 'pass' && p.contentStatus === 'pass'
+          ? p.ai.status
+          : p.contentStatus;
+        const status = MD_ICONS[mdDisplayStatus];
         const ai = p.ai;
         const v = ai?.valueScore != null ? ai.valueScore : '-';
         const o = ai?.originalityScore != null ? ai.originalityScore : '-';

@@ -236,13 +236,16 @@ export function computeCompositeScore(
     );
   }
 
-  // 5. Compliance/relevance thresholds
+  // 5. Compliance/relevance thresholds — only from pages with successful AI analysis
   let cap = 100;
   if (aiAnalyses && aiAnalyses.length > 0) {
-    const minCompliance = Math.min(...aiAnalyses.map(a => a.complianceScore ?? 5));
-    const avgRelevance = aiAnalyses.reduce((s, a) => s + (a.relevanceScore ?? 5), 0) / aiAnalyses.length;
-    if (minCompliance < COMPLIANCE_THRESHOLD) cap = COMPLIANCE_LOW_CAP;
-    else if (avgRelevance < RELEVANCE_THRESHOLD) cap = RELEVANCE_LOW_CAP;
+    const scored = aiAnalyses.filter(a => a.valueScore != null); // successful analyses have valueScore set
+    if (scored.length > 0) {
+      const minCompliance = Math.min(...scored.map(a => a.complianceScore ?? 5));
+      const avgRelevance = scored.reduce((s, a) => s + (a.relevanceScore ?? 5), 0) / scored.length;
+      if (minCompliance < COMPLIANCE_THRESHOLD) cap = COMPLIANCE_LOW_CAP;
+      else if (avgRelevance < RELEVANCE_THRESHOLD) cap = RELEVANCE_LOW_CAP;
+    }
   }
 
   // 6. Composite: value × site_coef × home_coef, capped by thresholds

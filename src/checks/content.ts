@@ -75,6 +75,8 @@ function checkFreshness(pages: Array<{ url: string; text: string }>): { hasRecen
     /(\d{4})[年/\-.](\d{1,2})[月/\-.](\d{1,2})/g,
     /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/gi,
     /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{4})/gi,
+    // Month YYYY (no day) — common blog date format
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/gi,
   ];
   const now = new Date();
   const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
@@ -88,9 +90,20 @@ function checkFreshness(pages: Array<{ url: string; text: string }>): { hasRecen
         hasAny = true;
         try {
           let ds: string;
-          if (p.source.includes('January|February')) ds = `${m[1]} ${m[2]} ${m[3]}`;
-          else if (p.source.includes('Jan|Feb')) ds = `${m[1]} ${m[2]} ${m[3]}`;
-          else ds = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+          // Distinguish by capture group count: Month YYYY has 2 groups, others have 3
+          if (m.length === 3 && p.source.includes('January|February')) {
+            // Month YYYY (no day) — pattern 3: (Month)(Year)
+            ds = `${m[1]} 1, ${m[2]}`;
+          } else if (p.source.includes('January|February')) {
+            // Month DD, YYYY — pattern 1: (Month)(DD)(YYYY)
+            ds = `${m[1]} ${m[2]} ${m[3]}`;
+          } else if (p.source.includes('Jan|Feb')) {
+            // DD Mon YYYY — pattern 2: (DD)(Mon)(YYYY)
+            ds = `${m[1]} ${m[2]} ${m[3]}`;
+          } else {
+            // YYYY-MM-DD — pattern 0: (YYYY)(MM)(DD)
+            ds = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+          }
           const d = new Date(ds);
           if (!isNaN(d.getTime()) && d > new Date('2020-01-01') && d <= now) {
             if (d > latest) { latest = d; latestStr = ds; }
