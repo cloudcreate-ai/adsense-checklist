@@ -349,6 +349,97 @@ program
     }
   });
 
+// Detect site type and topic
+program
+  .command('detect')
+  .description('Detect site type and topic from homepage')
+  .argument('<url>', 'Site URL to analyze')
+  .option('-j, --json', 'Output JSON to stdout')
+  .option('-t, --timeout <ms>', 'Page load timeout', '30000')
+  .option('--api-key <key>', 'AI API key')
+  .option('-l, --lang <lang>', `Output language (${getSupportedLangs().join('|')})`, 'en')
+  .option('--type <type>', 'Force site type (content|tool|game|video|reference), skip AI detection')
+  .action(async (siteUrl: string, opts) => {
+    const url = siteUrl.startsWith('http') ? siteUrl : 'https://' + siteUrl;
+    const lang: Lang = isValidLang(opts.lang) ? opts.lang : 'en';
+    const validTypes: SiteType[] = ['content', 'tool', 'game', 'video', 'reference'];
+    const forcedType: SiteType | undefined = validTypes.includes(opts.type as SiteType) ? opts.type as SiteType : undefined;
+
+    const browser = new BrowserManager();
+    try {
+      process.stderr.write(chalk.cyan(`● Detecting site topic for ${url}...\n`));
+      const page = await browser.newPage();
+      const data = await fetchPage(page, url, parseInt(opts.timeout, 10));
+      await page.close();
+
+      // DOM-based detection
+      const domResult = detectSiteType([data.signals], data.navText + ' ' + data.footerText, forcedType);
+      process.stderr.write(chalk.gray(`  DOM detection: ${domResult.type} (${domResult.confidence})\n`));
+
+      // AI-based topic analysis
+      const apiKey = opts.apiKey || process.env.AI_API_KEY;
+      if (apiKey && !forcedType) {
+        process.stderr.write(chalk.gray('  AI: analyzing topic...\n'));
+        const topic = await analyzeSiteTopic(
+          { title: data.title, text: data.text, navText: data.navText + ' ' + data.footerText },
+          lang, apiKey
+        );
+
+        if (opts.json) {
+          console.log(JSON.stringify({
+            domType: domResult.type,
+            domConfidence: domResult.confidence,
+            aiType: topic.type,
+            topic: topic.topic,
+            description: topic.description,
+            confidence: topic.confidence,
+            reasoning: topic.reasoning,
+          }, null, 2));
+        } else {
+          console.log('');
+          console.log(chalk.bold('  Site Type Detection'));
+          console.log(chalk.gray(`  DOM: ${domResult.type} (${domResult.confidence})`));
+          console.log(chalk.gray(`  AI:  ${topic.type} (${topic.confidence})`));
+          console.log('');
+          console.log(chalk.bold('  Site Topic'));
+          console.log(`  ${chalk.bold(topic.topic)}`);
+          console.log(chalk.gray(`  ${topic.description}`));
+          if (topic.metaIncomplete) {
+            console.log(chalk.yellow(`  ⚠ Meta description is thin — consider adding a more descriptive <meta> tag`));
+          }
+          if (topic.metaSuggestions && topic.metaSuggestions.length > 0) {
+            console.log('');
+            console.log(chalk.bold('  Meta Suggestions'));
+            for (const s of topic.metaSuggestions) {
+              console.log(chalk.yellow(`  → ${s}`));
+            }
+          }
+          console.log('');
+        }
+      } else {
+        if (opts.json) {
+          console.log(JSON.stringify({
+            type: domResult.type,
+            confidence: domResult.confidence,
+            signals: domResult.signals,
+          }, null, 2));
+        } else {
+          console.log('');
+          console.log(chalk.bold('  Site Type (DOM detection)'));
+          console.log(`  ${domResult.type} (${domResult.confidence})`);
+          console.log('');
+        }
+      }
+
+      await browser.close();
+      process.exit(0);
+    } catch (err) {
+      await browser.close();
+      console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+      process.exit(2);
+    }
+  });
+
 // Evaluate approval probability from an existing JSON report
 program
   .command('eval')

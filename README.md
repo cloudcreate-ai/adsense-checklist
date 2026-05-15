@@ -82,6 +82,21 @@ adsense-check page https://example.com/some-page --json
 
 Without `-r/--relevance`, the page is scored in isolation and Relevance will always be high (the page defines its own topic). With `-r`, the site homepage is auto-extracted from the page URL (`https://example.com/blog/post` → `https://example.com`) and crawled first to detect the site topic, then the page's Relevance score reflects alignment with that theme. Use `--site` to override the auto-extracted origin for cross-site checks or local development.
 
+### Detect Subcommand
+
+Detect site type and topic from the homepage:
+
+```bash
+# Detect site type and topic
+adsense-check detect https://example.com
+
+# Force site type, skip AI detection
+adsense-check detect https://example.com --type game
+
+# JSON output
+adsense-check detect https://example.com --json
+```
+
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
 
 ## Features
@@ -207,6 +222,17 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 -l, --lang <lang>         Output language: en|zh (default: en)
 --type <type>             Force site type: content|tool|game|video|reference
 --detect-only             Only detect site type/topic, skip full check
+```
+
+### Detect subcommand
+
+```
+detect [options] <url>          Detect site type and topic from homepage
+  -j, --json                    Output JSON to stdout
+  -t, --timeout <ms>            Page load timeout (default: 30000)
+  --api-key <key>               AI API key
+  -l, --lang <lang>             Output language: en|zh (default: en)
+  --type <type>                 Force site type, skip AI detection
 ```
 
 ### Page subcommand
