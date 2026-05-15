@@ -34,29 +34,29 @@ cp .env.example .env
 adsense-check https://example.com --ai --api-key sk-xxx...
 ```
 
-## Quick Start
+# Quick Start
 
 ```bash
-# Full check with AI analysis
-adsense-check https://example.com --ai
-
-# Full check with expert AI assessment
-adsense-check https://example.com --ai --expert
-
-# Quick check without AI (mechanical checks only)
+# Full check with AI analysis (AI enabled by default)
 adsense-check https://example.com
+
+# Full check with expert AI assessment (auto-enabled when configured)
+adsense-check https://example.com --expert
+
+# Disable AI for mechanical checks only
+adsense-check https://example.com --no-ai
 
 # JSON output (for programmatic use)
 adsense-check https://example.com --json
 
 # Chinese output
-adsense-check https://example.com -l zh --ai
+adsense-check https://example.com -l zh
 
 # Only detect site type and topic
-adsense-check https://example.com --detect-only --ai
+adsense-check https://example.com --detect-only
 
 # Single-page value analysis
-adsense-check https://example.com --page https://example.com/some-page --ai
+adsense-check https://example.com --page https://example.com/some-page
 ```
 
 Reports are auto-saved to `tmp/<domain>-<timestamp>.json` and `tmp/<domain>-<timestamp>.md`.
@@ -80,10 +80,12 @@ AI analysis classifies the site type and topic. Falls back to DOM signal detecti
 
 ### AI Topic Analysis
 
-With `--ai`, the tool analyzes the homepage to determine:
+With AI enabled (default), the tool analyzes the homepage to determine:
 - **Topic**: What the site is about (e.g., "online match-3 puzzle games")
 - **Description**: One-line summary of the site's purpose
 - **Type**: content / tool / game / video / reference / unsupported
+
+Use `--no-ai` to skip AI analysis. The expert model is auto-enabled when `AI_EXPERT_MODEL` or `AI_EXPERT_API_KEY` is configured with a different model than the fast model. Override with `--no-expert` to disable.
 
 ### 5-Dimension AI Page Scoring
 
@@ -169,8 +171,10 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 -c, --content-limit <n>   Max content pages to crawl (default: 20)
 --sample-min <n>          Min content pages to sample (default: 20)
 --sample-ratio <ratio>    Content page sampling ratio 0-1 (default: 0.2)
---ai                      Enable AI content quality analysis
---expert                  Enable expert AI summary (requires --ai)
+--ai                      Enable AI content quality analysis (default: on)
+--no-ai                   Disable AI content quality analysis
+--expert                  Enable expert AI summary (default: auto when configured)
+--no-expert               Disable expert AI summary
 -b, --concurrency <n>     AI batch concurrency (default: 5)
 --page <url>              Analyze single page value (5-dimension scoring)
 -t, --timeout <ms>        Page load timeout (default: 30000)
@@ -187,7 +191,8 @@ Reads a previously saved JSON report and runs approval estimation without re-cra
 ```
 eval <report>             Evaluate approval probability from existing JSON report
   --lang <lang>           Output language: en|zh (default: en)
-  --expert                Run expert model assessment
+  --expert                Run expert model assessment (default: auto when configured)
+  --no-expert             Disable expert model assessment
   --json                  Output JSON comparison
 ```
 
