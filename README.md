@@ -98,7 +98,7 @@ adsense-check https://example.com --no-ai
 # JSON output (for programmatic use)
 adsense-check https://example.com --json
 
-# Chinese output
+# Localized output
 adsense-check https://example.com -l zh
 
 # Only detect site type and topic
@@ -370,48 +370,48 @@ eval <report>             Evaluate approval probability from existing JSON repor
 ### Terminal Report
 
 ```
-  AdSense 审核检查报告
+  AdSense Review Report
   URL: https://example.com
   Time: 2026-05-08T15:00:00.000Z
-  Site type: 内容站
+  Site type: Content
   Topic: Excel translation reference — Provides Excel terminology translations for multiple languages.
-  页面: 50, 50 AI-analyzed, 置信度: high
+  Pages: 50, 50 AI-analyzed, confidence: high
 
-  审核结论
+  Review Result
 
-  综合评分: 82/100
-  ┌─ 全站质量: 94/100
-  │  首页质量: 90/100
-  │  网页价值: 97/100
+  Composite Score: 82/100
+  ┌─ Site Quality: 94/100
+  │  Landing Page: 90/100
+  │  Page Value: 97/100
   │
   │  97 × 94/100 × 90/100 = 82
   └─
 
-  审核通过概率
-    初步评估: ~85% (置信度: 高)
-    AI快速评估: ~90% (deepseek-v4-flash)
-    AI专家评估: ~88% (deepseek-v4-pro)
+  Approval Probability
+    Rule-based: ~85% (confidence: high)
+    AI fast model: ~90% (deepseek-v4-flash)
+    AI expert model: ~88% (deepseek-v4-pro)
 
-  全站质量分解 (94/100)
+  Site Quality Breakdown (94/100)
 
-    ── 硬性要求 PASS
+    ── Hard Requirements PASS
 
-      ✔ 站点规模             站点规模良好 (194 个页面)
-      ✔ About            找到 About 页面 (/about/)
+      ✔ Site Scale         Good site size (194 pages)
+      ✔ About              Found About page (/about/)
       ...
-      评分: READY — 所有必要项达标
+      Score: READY — All required items met
 
-    ── 内容质量
+    ── Content Quality
 
-      ✔ 页面结构多样性良好 (最高相似度 42%)
-      ✔ 正文原创度 41/100
+      ✔ Page structure diversity OK (max similarity 42%)
+      ✔ Content originality 41/100
       ...
 
-    ── 用户体验
+    ── User Experience
 
-      ✔ 移动端字体
-      ✔ 标题层级
-      ✔ 导航元素
+      ✔ Mobile font size
+      ✔ Heading structure
+      ✔ Navigation elements
       ...
 ```
 

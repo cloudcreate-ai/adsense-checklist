@@ -1,235 +1,210 @@
-# AdSense Checklist — 检查项说明
+# AdSense Checklist — Check Items Reference
 
-## 评分体系
+## Overview
 
-支持内容站、工具站、游戏站、视频站、参考站的自动化检查。采用**两组评分**：硬性要求（Hard）+ 智能评分（Soft）。
+Automated website checker for Google AdSense review requirements. Detects "low value content" — the #1 rejection reason. Supports content sites, tool sites, game sites, video sites, and reference sites with AI-powered topic analysis, 5-dimension content quality scoring, and stratified sampling.
+
+## Subcommands
+
+| Command | Purpose | Speed |
+|---------|---------|-------|
+| `<url>` (main) | Full check: crawler + AI content quality + hard requirements + homepage | ~1-3 min |
+| `site <url>` | Site-wide hard requirements only: required pages, robots.txt, sitemap, ads.txt, policy keywords | ~10s |
+| `home <url>` | Homepage quality: H1, internal links, load speed, viewport, mobile UX | ~5s |
+| `page <url>` | Single page AI 5-dimension scoring (use `-r` to check relevance against site topic) | ~10s |
+| `topic <url>` | Detect site type and topic from homepage | ~5s |
+| `init` | Generate `.adsense-check.yaml` config file | — |
+| `eval <report>` | Estimate approval probability from an existing JSON report | ~5s |
+
+## Scoring System
+
+Three independent signals combine into the final composite score:
 
 ```
-综合评分 = 硬性通过率 × 0.4 + 智能得分 × 0.6 - 警告扣分
+Composite = Page Value(VOT) × Site Quality/100 × Landing Page Quality/100
 ```
 
-- **硬性要求**：必须全部通过，任一 FAIL 则整体 NOT READY
-- **智能评分**：0-100 分，加权计算
-- **警告扣分**：警告比例 >15% 时按比例扣分
+- **Page Value (VOT)**: ∛(Value × Originality × Translation) — the core content quality signal, computed as a geometric mean of AI-evaluated dimensions across all content pages
+- **Site-wide Quality**: Pass rate of all hard requirements + content quality + UX categories. Acts as a multiplier
+- **Landing Page Quality**: Pass rate of landing page–specific checks (H1, internal links, load speed, viewport, mobile overflow, homepage content). Also a multiplier
 
-### 智能评分权重
+### Caps
 
-| 组成 | 权重 | 说明 |
-|------|------|------|
-| 价值分析 | 45% | 四维评分的几何均值（见下方） |
-| 内容质量 | 35% | 机械检测（重复率、深度、模板等） |
-| 用户体验 | 10% | 字体、弹窗等 |
-| 页面质量 | 10% | 各页面的逐页机械评分 |
+- Any page compliance < 6 → max composite score 50
+- Average relevance < 6 → max composite score 60
+
+### Page Base Score
+
+Each page receives a base score of 100/100, reduced only by AI quality assessment (AI warn → max 70, AI fail → 0). Content quality is assessed entirely through the AI 5-dimension evaluation rather than structural heuristics like character count or content ratio.
 
 ---
 
-## 硬性要求（Hard Requirements）
+## Hard Requirements
 
-任一 FAIL → `NOT READY`
+Any FAIL → category NOT READY
 
-### 1. 站点规模
+### 1. Site Scale
 
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 站点规模 | sitemap + 链接发现的总页面数 | ≥ 10 个页面 |
+| Check | Description | Pass Condition |
+|-------|-------------|----------------|
+| Site scale | Total pages discovered via sitemap + links | ≥ 10 pages |
 
-### 2. 必要页面
+### 2. Required Pages
 
-| 检查项 | 必需 | 匹配方式 |
-|--------|------|----------|
-| About 页面 | ✅ | URL 路径 `/about` + 链接文字 + sitemap |
-| Privacy Policy 页面 | ✅ | URL 路径 `/privacy` + 链接文字 + sitemap |
-| Contact 页面 | ✅ | URL 路径 `/contact` + 链接文字 + sitemap |
-| Terms of Service 页面 | ⚠️ 建议 | URL 路径 `/terms` + 链接文字 + sitemap |
+| Check | Required | Detection |
+|-------|----------|-----------|
+| About page | ✅ | URL path `/about` + link text + sitemap |
+| Privacy Policy page | ✅ | URL path `/privacy` + link text + sitemap |
+| Contact page | ✅ | URL path `/contact` + link text + sitemap |
+| Terms of Service page | ⚠️ Recommended | URL path `/terms` + link text + sitemap |
 
-检测覆盖范围：首页所有链接的 href + 可见文字 + `<nav>` + `<footer>` + sitemap.xml URL。
+### 3. Site Structure
 
-### 3. 网站结构
+| Check | Description | Pass Condition |
+|-------|-------------|----------------|
+| robots.txt | robots.txt file existence | File exists and accessible |
+| sitemap.xml | sitemap file existence | File exists and accessible |
+| ads.txt | ads.txt file existence | File exists and accessible |
 
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| H1 标签 | 页面 H1 标签数量 | 有且仅有 1 个 |
-| robots.txt | robots.txt 文件是否存在 | 文件存在且可访问 |
-| sitemap.xml | sitemap 文件是否存在 | 文件存在且可访问 |
-| 内部链接 | 首页内部链接数量 | ≥ 5 个 |
-| 死链检测 | 爬取内链检查 HTTP 状态码 | 无 404/5xx 响应 |
+### 4. Performance
 
-### 4. 性能底线
+| Check | Description | Pass Condition |
+|-------|-------------|----------------|
+| H1 tag | Page H1 tag count | Exactly 1 |
+| Internal links | Homepage internal link count | ≥ 5 |
+| Page load speed | Time to DOMContentLoad | < 3s pass, 3-6s warn, > 6s fail |
+| Viewport tag | `<meta name="viewport">` existence | Tag present |
+| Mobile horizontal overflow | Check horizontal scroll at iPhone viewport (390px) | body width ≤ viewport width |
 
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 页面加载速度 | 从请求到 DOMContentLoaded 的时间 | < 3s 通过，3-6s 警告，> 6s 失败 |
-| viewport 标签 | 是否存在 `<meta name="viewport">` | 标签存在 |
-| 移动端横向溢出 | 以 iPhone 视口（390px）访问，检测横向滚动 | body 宽度 ≤ 视口宽度 |
+### 5. Policy Compliance
 
-### 5. 政策合规
+| Check | Source | Description | Pass Condition |
+|-------|--------|-------------|----------------|
+| Blacklist keywords | Mechanical | Scan page for prohibited keywords | No matches |
+| AI severe violations | AI | AI detects severe violations (compliance ≤ 2) | No severe violation pages |
+| AI suspicious content | AI | AI detects suspicious non-compliant content | ≤ 20% of pages |
+| AI compliance re-check | AI | Second-pass review for borderline pages (score 3-5) | No severe violations after re-check |
 
-| 检查项 | 来源 | 说明 | 通过条件 |
-|--------|------|------|----------|
-| 违规关键词 | 机械 | 扫描页面是否包含违规关键词 | 无匹配 |
-| AI 严重违规 | AI | AI 检测严重违规内容（compliance ≤ 2） | 无严重违规页面 |
-| AI 可疑内容 | AI | AI 检测可疑不合规内容 | ≤ 20% 的页面 |
-| AI 合规复检 | AI | 对 borderline 分数(3-5)的页面进行二次审核 | 复检后无严重违规 |
-
-违规关键词黑名单（中英文）：色情、赌博、盗版、毒品、暴力类。
-
-AI 合规复检会考虑上下文：教育/新闻/信息性质的敏感话题（如"puzzle crack"新闻、"betting odds"体育分析）不算违规；但 AI 会参考站外知识判断内容风险（如 Jenny Mod 社区的成人内容关联）。
+Keyword blacklist (Chinese and English): pornography, gambling, piracy, drugs, violence.
 
 ---
 
-## 智能评分（Soft Scoring）
+## AI 5-Dimension Page Scoring
 
-### 6. 内容质量（机械检测）
+Requires `--ai` flag + AI API configuration. Supports any OpenAI-compatible API format.
 
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 有效内容比率 | 剥离导航/footer/sidebar 后的正文占总页面比例 | 正文 ≥ 30% |
-| 首页实质内容 | 首页正文字符数（排除模板元素） | ≥ 500 字 |
-| 内页内容深度 | 抽样内页的正文字符数 | ≥ 300 字（超半数不足 → fail） |
-| 模板化检测 | 多页面结构相似度（替换文字后的骨架对比） | 相似度 < 60% |
-| 凑字数检测 | 重复短语、无意义填充文字 | 每页平均 ≤ 3 处 |
-| 跨页内容重复 | 段落级去重，200 字粒度检测内容搬运 | 重复率 < 30% |
-| 内容新鲜度 | 页面中日期信息的时效性 | 最近 6 个月内有更新 |
+### Scoring Dimensions
 
-### 正文提取算法
+Each page receives 5 AI-evaluated dimensions (0-10):
 
-1. 将页面按空行分段
-2. 跨页面对比，标记出现在 ≥60% 其他页面的段落（视为模板元素）
-3. 剩余段落即为"正文内容"
+| Dimension | Description | Criteria |
+|-----------|-------------|----------|
+| Value | Does content provide substantive value? | Deep information, helpful to readers, non-empty |
+| Originality | Is content original? | Unique perspective, not plagiarized/AI-generated/copied |
+| Relevance | How relevant to site topic? | Directly related → partially → unrelated |
+| Compliance | AdSense policy compliance? | No prohibited content |
+| Translation | Translation quality | Content matches declared language, no machine-translation artifacts. English pages auto-score 10 |
 
-### 模板检测算法
-
-1. 将所有文字替换为 `W`、数字替换为 `N`
-2. 比较页面间的"骨架"结构相似度
-3. 相似度 > 60% 视为模板批量生成
-
-### 7. 用户体验
-
-| 检查项 | 说明 | 通过条件 |
-|--------|------|----------|
-| 移动端字体大小 | 检测所有文字元素字号 | 所有文字 ≥ 12px |
-| 弹窗检测 | 检测可见的 modal/popup/overlay 元素 | 无可见弹窗 |
-
-### 8. 价值分析（四维评分）
-
-需要 `--ai` 标志 + AI API 配置。支持任何兼容 OpenAI API 格式的服务。
-
-#### 评分维度
-
-每个页面 AI 返回 4 个维度评分（0-10）：
-
-| 维度 | 说明 | 评估标准 |
-|------|------|---------|
-| Value（价值） | 内容是否提供实质价值 | 深度信息、对读者有帮助、非空洞 |
-| Originality（原创） | 内容是否原创 | 独特视角、非抄袭/洗稿/AI 生成 |
-| Relevance（相关） | 与站点主题的相关性 | 直接相关 → 部分相关 → 不相关 |
-| Compliance（合规） | 是否符合 AdSense 政策 | 无违规内容 |
-
-#### 页面评分：几何均值
+### Page Score: Geometric Mean
 
 ```
-pageAiScore = (value × originality × relevance × compliance) ^ (1/4) × 10
+pageAiScore = (value × originality × relevance × compliance × translation) ^ (1/5) × 10
 ```
 
-几何均值特性：任一维度为 0 则总分为 0；低维度严重拖累整体（木桶效应）。
+Geometric mean property: any dimension at 0 drives total to 0; low dimensions drag heavily (weakest link effect).
 
-示例：
-- 8, 8, 8, 8 → 80
-- 10, 10, 10, 2 → 37.6（合规差 → 大幅扣分）
-- 10, 3, 8, 8 → 57.3（原创差 → 显著扣分）
-
-#### 站点评分：页面类型加权平均
+### Site Score: Page-Type Weighted Average
 
 ```
 siteAiScore = Σ(pageAiScore × typeWeight) / Σ(typeWeight)
 ```
 
-| 页面类型 | 权重 | 说明 |
-|---------|------|------|
-| homepage | 1.5 | 首页是站点门面 |
-| content | 1.0 | 核心内容页 |
-| game_detail | 1.0 | 游戏站核心内容 |
-| video_detail | 1.0 | 视频站核心内容 |
-| reference_detail | 1.0 | 参考站核心内容 |
-| unknown | 0.5 | 未知页面 |
-| required | 0.2 | 法律/必要页面 |
-| listing | 0.1 | 列表/导航页 |
-| reference_listing | 0.1 | 参考站列表页 |
-| utility | 0.1 | 功能性页面 |
-
-页面类型由 URL 路径自动判定（见 `classifier.ts`）。开启 `--ai` 后，AI 会基于内容推断页面类型，覆盖 URL 路径分类。AI 支持的类型：homepage、listing、content、game_detail、video_detail、reference_detail、required、utility。
-
-#### 单页分析
-
-使用 `--page <url>` 可对单个页面进行四维价值分析：
-
-```bash
-adsense-check <site> --page <page-url> --ai
-```
-
-输出示例：
-```
-Value        9/10
-Originality  6/10
-Relevance    10/10
-Compliance   10/10
-
-Overall: 86/100 (geometric mean)
-```
+| Page Type | Weight | Description |
+|-----------|--------|-------------|
+| homepage | 1.5 | Site storefront |
+| content | 1.0 | Core content pages |
+| game_detail | 1.0 | Game site core content |
+| video_detail | 1.0 | Video site core content |
+| reference_detail | 1.0 | Reference site core content |
+| unknown | 0.5 | Unknown pages |
+| required | 0.2 | Legal/required pages |
+| listing | 0.1 | Listing/navigation pages |
+| reference_listing | 0.1 | Reference site listing pages |
+| utility | 0.1 | Functional pages |
 
 ---
 
-## 站点类型检测
+## Site Type Detection
 
-### AI 主题分析（`--ai`）
+### AI Topic Analysis (default enabled)
 
-调用 AI 分析首页标题、导航、正文，判断：
-- 站点类型：content / tool / game / video / reference / unsupported
-- 主题关键词
-- 一句话描述
+AI analyzes homepage title, navigation, and body text to determine:
+- Site type: content / tool / game / video / reference / unsupported
+- Topic keyword
+- One-line description
 
-### DOM 信号检测（fallback）
+### DOM Signal Detection (fallback)
 
-当 AI 不可用时，基于 DOM 信号判断：
-- **Game**: iframe 游戏嵌入、canvas 标签、游戏相关链接
-- **Video**: YouTube/Vimeo/B站等视频 iframe 嵌入、`<video>` 标签、视频导航关键词
-- **Reference**: 高文章比例、导航中含 wiki/encyclopedia/glossary 等关键词、低 iframe 比例
-- **Tool**: 导航中含 calculator/converter/generator/tool 等关键词
-- **Content**: 默认类型
+When AI is unavailable, DOM signals determine type:
+- **Game**: iframe game embeds, canvas tags, game-related links
+- **Video**: YouTube/Vimeo/Bilibili video iframes, `<video>` tags, video navigation keywords
+- **Reference**: High article ratio, navigation with wiki/encyclopedia/glossary keywords
+- **Tool**: Navigation with calculator/converter/generator/tool keywords
+- **Content**: Default type
 
-### 类型对检查的影响
+### Type-Specific Standards
 
-| 类型 | 内容深度标准 | 特殊处理 |
-|------|------------|----------|
-| Content | ≥ 300 字/页 | 正文占比重点检查 |
-| Tool | ≥ 300 字/页 | 同 content 标准 |
-| Game | ≥ 100 字/页（游戏描述） | 宽松的内容深度要求 |
-| Video | ≥ 50 字/页（视频描述） | 视频描述文字 + 多样性检查 |
-| Reference | ≥ 100 字/页（参考条目） | 参考条目结构 + 多样性检查 |
-| Unsupported | — | 跳过检查，直接警告 |
+| Type | Content Depth | Special Handling |
+|------|--------------|------------------|
+| Content | ≥ 300 chars/page | Focus on content ratio |
+| Tool | ≥ 300 chars/page | Same as content |
+| Game | ≥ 100 chars/page | Relaxed content depth |
+| Video | ≥ 50 chars/page | Video descriptions + diversity |
+| Reference | ≥ 100 chars/page | Reference structure + diversity |
+| Unsupported | — | Skip checks, warn |
 
-## 抽样策略
+---
 
-1. 收集所有已知 URL（首页链接 + sitemap + Phase 1 发现的链接）
-2. 过滤技术文件（.xml, .txt, .json, .css, .js, 图片等）
-3. 支持递归 sitemap 索引（`<sitemap>` 标签，最大深度 3）
-4. Phase 1：爬取结构页面（首页、必要页、列表页），上限 `--page-limit`
-5. Phase 2：按 freshness 排序内容页面，优先取 6 个月内的新内容
-6. 抽样数量：max(总内容 × sampleRatio, sampleMin)，不超过 `--content-limit`
-7. 统一爬取上限：Phase 1 + Phase 2 不超过 `--max-crawl`
+## Stratified Sampling
 
-## 抽样置信度
+1. Discover URLs from sitemaps (including recursive sitemap indexes and robots.txt fallback) and homepage links
+2. **Always-crawl pages**: homepage + required pages (about, privacy, contact, terms)
+3. **URL classification**: Classify each URL by path pattern (content, game_detail, listing, reference_detail, etc.)
+4. **Proportional budget allocation**: Remaining crawl budget distributed across page types proportionally to weight and count
+5. **Freshness sorting**: Within each type group, URLs with date patterns in paths are crawled first
 
-| 置信度 | 条件 |
-|--------|------|
-| high | 抽样 ≥ 50% 的已发现内容页 |
-| medium | 抽样 ≥ 20% |
-| low | 抽样 < 20% |
+## Sampling Confidence
 
-## 退出码
+| Confidence | Condition |
+|------------|-----------|
+| high | Sampled ≥ 50% of discovered content pages |
+| medium | Sampled ≥ 20% |
+| low | Sampled < 20% |
 
-| 退出码 | 含义 |
-|--------|------|
-| 0 | 无 FAIL（READY 或 MOSTLY READY） |
-| 1 | 有 FAIL（NOT READY） |
-| 2 | 运行错误（URL 无效、网络异常等） |
+---
+
+## Approval Probability Estimation
+
+| Method | Description |
+|--------|-------------|
+| **Rule-based** | Mechanical estimate from composite score, hard status, AI site score |
+| **Fast model** | AI reviews full report, provides probability + reasons + actions |
+| **Expert model** | Deeper analysis with `--expert` flag |
+
+---
+
+## Configuration
+
+Priority: CLI flags > `.adsense-check.yaml` > `~/.adsense-check/config.yaml` > built-in defaults.
+
+Run `npx adsense-check init` to generate a config file. Use `--global` for global defaults.
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No failures (READY or MOSTLY READY) |
+| 1 | Has failures (NOT READY or NEEDS FIXES) |
+| 2 | Runtime error (invalid URL, network issue, etc.) |
