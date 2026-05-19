@@ -398,6 +398,11 @@ export function renderTerminalReport(report: CheckReport): string {
           dimStr('R', d.relevanceScore ?? 5),
         ].join(' ');
         lines.push(`       ${ICONS[d.status]} AI: ${dims}`);
+        if (d.valueReason) lines.push(chalk.gray(`       V: ${truncate(d.valueReason, 150)}`));
+        if (d.originalityReason) lines.push(chalk.gray(`       O: ${truncate(d.originalityReason, 150)}`));
+        if (d.complianceReason) lines.push(chalk.gray(`       C: ${truncate(d.complianceReason, 150)}`));
+        if (d.translationReason) lines.push(chalk.gray(`       T: ${truncate(d.translationReason, 150)}`));
+        if (d.relevanceReason) lines.push(chalk.gray(`       R: ${truncate(d.relevanceReason, 150)}`));
         lines.push(`       ${truncate(d.assessment, 120)}`);
         for (const s of d.suggestions.slice(0, 2)) lines.push(chalk.gray(`         → ${truncate(s, 70)}`));
       }
@@ -783,6 +788,11 @@ export function renderMarkdownReport(report: CheckReport): string {
             lines.push(`- ${t('md.ai_status', lang)}: ${MD_ICONS[ai.status]} ${statusLabel}`);
             if (ai.valueScore != null) {
               lines.push(`- ${t('md.five_dimensions', lang)}: **${t('md.dim_value', lang)} ${ai.valueScore}** | **${t('md.dim_originality', lang)} ${ai.originalityScore}** | **${t('md.dim_translation', lang)} ${ai.translationScore ?? '-'}** | **${t('md.dim_compliance', lang)} ${ai.complianceScore}** | **${t('md.dim_relevance', lang)} ${ai.relevanceScore}**`);
+              if (ai.valueReason) lines.push(`- ${t('md.dim_value', lang)}: ${ai.valueReason}`);
+              if (ai.originalityReason) lines.push(`- ${t('md.dim_originality', lang)}: ${ai.originalityReason}`);
+              if (ai.complianceReason) lines.push(`- ${t('md.dim_compliance', lang)}: ${ai.complianceReason}`);
+              if (ai.translationReason) lines.push(`- ${t('md.dim_translation', lang)}: ${ai.translationReason}`);
+              if (ai.relevanceReason) lines.push(`- ${t('md.dim_relevance', lang)}: ${ai.relevanceReason}`);
               const votScore = Math.round(Math.pow((ai.valueScore ?? 5) * (ai.originalityScore ?? 5) * (ai.translationScore ?? 5), 1 / 3) * 10);
               lines.push(`- ${t('md.ai_composite_score', lang)}: ${votScore}/100`);
             }

@@ -38,6 +38,11 @@ export interface PageDetail {
     relevanceScore?: number;
     complianceScore?: number;
     translationScore?: number;    // 0-10 translation quality
+    valueReason?: string;
+    originalityReason?: string;
+    relevanceReason?: string;
+    complianceReason?: string;
+    translationReason?: string;
     assessment: string;
     suggestions: string[];
   };
@@ -52,6 +57,12 @@ export interface SiteTopic {
   // Metadata quality
   metaIncomplete: boolean;       // true if site has no or very thin meta description
   metaSuggestions?: string[];    // AI-generated title/description improvement suggestions
+  // YMYL (Your Money or Your Life)
+  isYMYL?: boolean;              // true if site covers financial/medical/legal/safety topics
+  ymylReason?: string;           // which sensitive category is covered
+  // Niche focus
+  nicheFocusScore?: number;      // 1-10, how vertically focused the site is
+  nicheFocusReason?: string;     // why this score was given
 }
 
 export interface CategoryScore {

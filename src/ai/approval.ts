@@ -117,7 +117,7 @@ export async function summarizeFinal(
     siteUrl: report.url,
     siteType: report.siteType,
     pagesAnalyzed: String(report.pages.length),
-    totalDiscovered: report.samplingInfo?.totalDiscovered ?? report.pages.length,
+    totalDiscovered: String(report.samplingInfo?.totalDiscovered ?? report.pages.length),
     compositeScore: String(report.compositeScore),
     pageValueScore: String(report.pageValueScore),
     siteQuality: String(report.siteQuality),

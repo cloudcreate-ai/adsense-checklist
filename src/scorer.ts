@@ -153,17 +153,22 @@ function computePageVot(analysis: PageAiAnalysis): number {
 /**
  * Compute site-level VOT score: weighted average of per-page VOT scores,
  * excluding required/utility pages which don't need editorial content quality.
+ * Pages with failed AI analysis (no valueScore) are also excluded.
  */
 function computeSiteVot(
   aiAnalyses: PageAiAnalysis[],
   pageScores: Array<{ pageType: PageType; score: number }>
 ): number {
-  // Only content pages participate in VOT
+  // Only content pages with successful AI analysis participate in VOT
   const contentPages = aiAnalyses.map((a, i) => ({
     analysis: a,
     pageType: pageScores[i]?.pageType ?? 'unknown',
     vot: computePageVot(a),
-  })).filter(p => p.pageType !== 'required' && p.pageType !== 'utility');
+  })).filter(p =>
+    p.pageType !== 'required'
+    && p.pageType !== 'utility'
+    && p.analysis.valueScore != null // exclude failed AI pages
+  );
 
   if (contentPages.length === 0) return 0;
 

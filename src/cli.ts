@@ -55,7 +55,7 @@ async function detectSiteTopic(
       );
 
       if (json) {
-        console.log(JSON.stringify({
+        const result: Record<string, unknown> = {
           domType: domResult.type,
           domConfidence: domResult.confidence,
           aiType: topic.type,
@@ -63,7 +63,16 @@ async function detectSiteTopic(
           description: topic.description,
           confidence: topic.confidence,
           reasoning: topic.reasoning,
-        }, null, 2));
+        };
+        if (topic.isYMYL !== undefined) {
+          result.isYMYL = topic.isYMYL;
+          result.ymylReason = topic.ymylReason ?? undefined;
+        }
+        if (topic.nicheFocusScore !== undefined) {
+          result.nicheFocusScore = topic.nicheFocusScore;
+          result.nicheFocusReason = topic.nicheFocusReason ?? undefined;
+        }
+        console.log(JSON.stringify(result, null, 2));
       } else {
         console.log('');
         console.log(chalk.bold('  Site Type'));
@@ -73,6 +82,12 @@ async function detectSiteTopic(
         console.log(chalk.bold('  Site Topic'));
         console.log(`  ${chalk.bold(topic.topic)}`);
         console.log(chalk.gray(`  ${topic.description}`));
+        if (topic.isYMYL) {
+          console.log(chalk.red(`  ⚠ YMYL site detected: ${topic.ymylReason}`));
+        }
+        if (topic.nicheFocusScore !== undefined) {
+          console.log(chalk.gray(`  Niche focus: ${topic.nicheFocusScore}/10`));
+        }
         if (topic.metaIncomplete) {
           console.log(chalk.yellow(`  ⚠ Meta description is thin — consider adding a more descriptive <meta> tag`));
         }

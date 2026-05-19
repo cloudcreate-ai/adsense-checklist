@@ -87,6 +87,8 @@ Any FAIL → category NOT READY
 
 Keyword blacklist (Chinese and English): pornography, gambling, piracy, drugs, violence.
 
+Compliance re-check also flags dangerous AI hallucinations (serious factual errors that could cause harm) and deepfake/impersonation attempts.
+
 ---
 
 ## AI 5-Dimension Page Scoring
@@ -142,6 +144,8 @@ AI analyzes homepage title, navigation, and body text to determine:
 - Site type: content / tool / game / video / reference / unsupported
 - Topic keyword
 - One-line description
+- YMYL (Your Money or Your Life) sensitivity: financial, medical, legal, safety
+- Niche focus score (1-10): how vertically focused the site is
 
 ### DOM Signal Detection (fallback)
 

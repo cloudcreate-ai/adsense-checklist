@@ -8,5 +8,5 @@ export default defineConfig({
   clean: true,
   banner: ({ fileName }) => fileName === 'cli.js' ? '#!/usr/bin/env node' : undefined,
   external: ['playwright'],
-  onSuccess: 'cp -r src/ai/prompts dist/prompts 2>/dev/null || true',
+  onSuccess: 'mkdir -p dist/prompts && cp -r src/ai/prompts/* dist/prompts/ 2>/dev/null || true',
 });

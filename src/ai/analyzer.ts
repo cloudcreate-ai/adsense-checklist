@@ -15,6 +15,12 @@ export interface PageAiAnalysis {
   relevanceScore?: number;
   complianceScore?: number;
   translationScore?: number;
+  // Reasoning behind each score
+  valueReason?: string;
+  originalityReason?: string;
+  relevanceReason?: string;
+  complianceReason?: string;
+  translationReason?: string;
   assessment: string;
   suggestions: string[];
   // AI-inferred page type (overrides URL-based classification when AI is enabled)
@@ -54,26 +60,38 @@ export function getFastModel(): string {
   return process.env.AI_FAST_MODEL || process.env.AI_MODEL || 'deepseek-chat';
 }
 
-async function callAI(prompt: string, maxTokens: number = 4096, model?: string, apiBase?: string, apiKey?: string): Promise<string> {
-  const response = await fetch(getApiEndpoint(apiBase), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getApiKey(apiKey)}`,
-    },
-    body: JSON.stringify({
-      model: model || getFastModel(),
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+async function callAI(prompt: string, maxTokens: number = 4096, model?: string, apiBase?: string, apiKey?: string, maxRetries: number = 3): Promise<string> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(getApiEndpoint(apiBase), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getApiKey(apiKey)}`,
+        },
+        body: JSON.stringify({
+          model: model || getFastModel(),
+          max_tokens: maxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
 
-  if (!response.ok) {
-    throw new Error(`AI API error: ${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content ?? '';
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // Wait before retry — exponential backoff: 1s, 2s, 4s
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      }
+    }
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content ?? '';
+  throw lastError!;
 }
 
 export function extractJson(text: string): any {
@@ -136,11 +154,12 @@ export async function analyzeSinglePage(
   try {
     const text = await callAI(prompt, 2048, undefined, getFastApiBase());
     const result = extractJson(text);
-    let valueScore = clampScore(result.value);
-    let originalityScore = clampScore(result.originality);
-    const relevanceScore = clampScore(result.relevance);
-    const complianceScore = clampScore(result.compliance);
-    const translationScore = clampScore(result.translation);
+    const details = result.evaluation_details || result; // support both nested and flat formats
+    let valueScore = clampScore(details.value);
+    let originalityScore = clampScore(details.originality);
+    const relevanceScore = clampScore(details.relevance);
+    const complianceScore = clampScore(details.compliance);
+    const translationScore = clampScore(details.translation);
     const validPageTypes: PageType[] = ['homepage', 'listing', 'content', 'game_detail', 'video_detail', 'reference_detail', 'required', 'utility'];
     const inferredPageType = validPageTypes.includes(result.pageType) ? result.pageType : undefined;
     const confidence: 'high' | 'medium' | 'low' = ['high', 'medium', 'low'].includes(result.confidence) ? result.confidence : 'high';
@@ -180,6 +199,11 @@ export async function analyzeSinglePage(
       relevanceScore: finalRelevanceScore,
       complianceScore,
       translationScore: finalTranslationScore,
+      valueReason: details.value_reason ?? '',
+      originalityReason: details.originality_reason ?? '',
+      relevanceReason: details.relevance_reason ?? '',
+      complianceReason: details.compliance_reason ?? '',
+      translationReason: details.translation_reason ?? '',
       assessment: result.assessment ?? '',
       suggestions: result.suggestions ?? [],
       inferredPageType,
@@ -208,8 +232,8 @@ export async function recheckCompliance(
   pages: Array<{ url: string; text: string; firstComplianceScore: number }>,
   langName: string,
   onProgress?: (msg: string) => void
-): Promise<Map<string, { complianceScore: number; assessment: string }>> {
-  const result = new Map<string, { complianceScore: number; assessment: string }>();
+): Promise<Map<string, { complianceScore: number; complianceReason: string; assessment: string }>> {
+  const result = new Map<string, { complianceScore: number; complianceReason: string; assessment: string }>();
   if (pages.length === 0) return result;
 
   const progress = onProgress ?? (() => {});
@@ -233,12 +257,14 @@ export async function recheckCompliance(
       const finalScore = Math.max(page.firstComplianceScore, newScore);
       result.set(page.url, {
         complianceScore: finalScore,
+        complianceReason: r.compliance_reason ?? '',
         assessment: r.assessment ?? '',
       });
     } catch {
       // On failure, keep the original score
       result.set(page.url, {
         complianceScore: page.firstComplianceScore,
+        complianceReason: 'Re-check failed, keeping original score',
         assessment: 'Re-check failed, keeping original score',
       });
     }

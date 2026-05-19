@@ -126,6 +126,10 @@ export async function analyzeSiteTopic(
         confidence: metaTopic.confidence,
         reasoning: 'Extracted from page metadata',
         metaIncomplete,
+        isYMYL: undefined,
+        ymylReason: undefined,
+        nicheFocusScore: undefined,
+        nicheFocusReason: undefined,
       };
     }
   }
@@ -157,6 +161,10 @@ export async function analyzeSiteTopic(
       reasoning: result.reasoning ?? 'AI guessed from content analysis',
       metaIncomplete,
       metaSuggestions: result.metaSuggestions ?? [],
+      isYMYL: result.isYMYL ?? false,
+      ymylReason: result.YMYL_reason ?? undefined,
+      nicheFocusScore: typeof result.nicheFocusScore === 'number' ? Math.max(1, Math.min(10, result.nicheFocusScore)) : undefined,
+      nicheFocusReason: result.nicheFocusReason ?? undefined,
     };
   } catch {
     return {
@@ -167,6 +175,10 @@ export async function analyzeSiteTopic(
       reasoning: 'AI analysis failed',
       metaIncomplete,
       metaSuggestions: metaIncomplete ? ['Add a <meta name="description"> tag with 120-160 characters describing your site'] : [],
+      isYMYL: undefined,
+      ymylReason: undefined,
+      nicheFocusScore: undefined,
+      nicheFocusReason: undefined,
     };
   }
 }

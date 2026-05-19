@@ -98,6 +98,11 @@ function buildPageDetails(pages: Array<{ url: string; text: string; title: strin
       relevanceScore: ai.relevanceScore,
       complianceScore: ai.complianceScore,
       translationScore: ai.translationScore,
+      valueReason: ai.valueReason,
+      originalityReason: ai.originalityReason,
+      relevanceReason: ai.relevanceReason,
+      complianceReason: ai.complianceReason,
+      translationReason: ai.translationReason,
       assessment: ai.assessment,
       suggestions: ai.suggestions,
     };

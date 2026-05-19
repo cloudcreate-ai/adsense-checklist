@@ -204,6 +204,8 @@ With AI enabled (default), the tool analyzes the homepage to determine:
 
 Use `--no-ai` to skip AI analysis. The expert model is auto-enabled when `AI_EXPERT_MODEL` or `AI_EXPERT_API_KEY` is configured with a different model than the fast model. Override with `--no-expert` to disable.
 
+AI requests automatically retry up to 3 times with exponential backoff on failure.
+
 ### 5-Dimension AI Page Scoring
 
 Each page is evaluated by AI on five dimensions (0-10):

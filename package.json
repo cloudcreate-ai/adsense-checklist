@@ -1,6 +1,6 @@
 {
   "name": "@cloudcreate/adsense-check",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Check if a website meets Google AdSense review requirements",
   "homepage": "https://cloudcreate.ai",
   "repository": {
