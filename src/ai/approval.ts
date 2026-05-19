@@ -85,6 +85,7 @@ export async function summarizeFinal(
 ): Promise<{
   probability: number;
   verdict: string;
+  analysis: string;
   reasons: string[];
   topActions: string[];
   detailedSummary: string;
@@ -132,6 +133,7 @@ export async function summarizeFinal(
     return {
       probability: clamp(Number(result.probability), 0, 100),
       verdict: result.verdict ?? '',
+      analysis: result.analysis ?? '',
       reasons: result.reasons ?? [],
       topActions: result.topActions ?? [],
       detailedSummary: result.detailedSummary ?? '',
